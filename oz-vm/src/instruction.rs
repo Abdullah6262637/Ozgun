@@ -1,4 +1,7 @@
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Val {
     Number(f64),
@@ -11,6 +14,7 @@ pub enum Val {
         entry_ip: usize,
     },
     Builtin(String),
+    Array(Rc<RefCell<Vec<Val>>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,4 +40,6 @@ pub enum Instruction {
     JumpIfFalse(usize),
     Call(usize),
     Return,
+    Array(usize),
+    Index,
 }

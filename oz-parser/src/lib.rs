@@ -41,11 +41,17 @@ fn suffix_parser(values: &'static [&'static str]) -> impl Parser<Token, String, 
 
 fn expr_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     recursive(|expr| {
+        let array_literal = just(Token::LBracket)
+            .ignore_then(expr.clone().separated_by(just(Token::Comma)))
+            .then_ignore(just(Token::RBracket))
+            .map(Expr::Array);
+
         let literal = num_parser()
             .or(string_parser())
             .or(just(Token::Dogru).to(Expr::Literal(Literal::Boolean(true))))
             .or(just(Token::Yanlis).to(Expr::Literal(Literal::Boolean(false))))
-            .or(just(Token::Bos).to(Expr::Literal(Literal::Bos)));
+            .or(just(Token::Bos).to(Expr::Literal(Literal::Bos)))
+            .or(array_literal);
 
         let call_or_var = ident_parser()
             .then(
@@ -66,12 +72,26 @@ fn expr_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
             .or(call_or_var)
             .or(expr.clone().delimited_by(just(Token::LParen), just(Token::RParen)));
 
+        let index_suffix = just(Token::LBracket)
+            .ignore_then(expr.clone())
+            .then_ignore(just(Token::RBracket))
+            .or(
+                suffix_parser(&["in", "ın", "un", "ün", "nin", "nın", "nun", "nün"])
+                    .ignore_then(expr.clone())
+                    .then_ignore(suffix_parser(&["inci", "ıncı", "uncu", "üncü", "nci", "ncı", "ncu", "ncü"]))
+                    .then_ignore(suffix_parser(&["elemanı", "elemani", "değeri", "degeri"]))
+            );
+
+        let indexed_atom = atom.then(index_suffix.repeated()).foldl(|array, index| {
+            Expr::Index(Box::new(array), Box::new(index))
+        });
+
         // Factor: multiplicative operators
         let op_mul = just(Token::Mul)
             .to(BinaryOp::Mul)
             .or(just(Token::Div).to(BinaryOp::Div))
             .or(just(Token::Mod).to(BinaryOp::Mod));
-        let factor = atom.then(op_mul.then(expr.clone()).repeated()).foldl(
+        let factor = indexed_atom.then(op_mul.then(expr.clone()).repeated()).foldl(
             |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
         );
 

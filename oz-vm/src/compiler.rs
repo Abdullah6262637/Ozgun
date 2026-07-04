@@ -57,6 +57,17 @@ impl Compiler {
                 self.instructions.push(Instruction::Load(name.clone()));
                 self.instructions.push(Instruction::Call(args.len()));
             }
+            Expr::Array(elements) => {
+                for el in elements {
+                    self.compile_expr(el)?;
+                }
+                self.instructions.push(Instruction::Array(elements.len()));
+            }
+            Expr::Index(array_expr, index_expr) => {
+                self.compile_expr(array_expr)?;
+                self.compile_expr(index_expr)?;
+                self.instructions.push(Instruction::Index);
+            }
         }
         Ok(())
     }

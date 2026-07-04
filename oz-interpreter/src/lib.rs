@@ -14,6 +14,7 @@ pub enum Val {
         body: Vec<Statement>,
     },
     Builtin(Rc<dyn Fn(Vec<Val>) -> Val>),
+    Array(Rc<RefCell<Vec<Val>>>),
 }
 
 impl std::fmt::Debug for Val {
@@ -25,6 +26,17 @@ impl std::fmt::Debug for Val {
             Val::Bos => write!(f, "Bos"),
             Val::Function { params, .. } => write!(f, "Function(params: {:?})", params),
             Val::Builtin(_) => write!(f, "Builtin"),
+            Val::Array(arr) => {
+                let items = arr.borrow();
+                write!(f, "[")?;
+                for (i, val) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:?}", val)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -36,6 +48,7 @@ impl PartialEq for Val {
             (Val::String(a), Val::String(b)) => a == b,
             (Val::Boolean(a), Val::Boolean(b)) => a == b,
             (Val::Bos, Val::Bos) => true,
+            (Val::Array(a), Val::Array(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             _ => false,
         }
     }
@@ -114,6 +127,30 @@ pub fn create_global_env() -> Env {
                 }
             }
             println!();
+            Val::Bos
+        })),
+    );
+    // Built-in function "boyut" (returns length of array)
+    env.set(
+        "boyut".to_string(),
+        Val::Builtin(Rc::new(|args| {
+            if args.len() == 1 {
+                if let Val::Array(arr) = &args[0] {
+                    return Val::Number(arr.borrow().len() as f64);
+                }
+            }
+            Val::Number(0.0)
+        })),
+    );
+    // Built-in function "ekle" (appends element to array)
+    env.set(
+        "ekle".to_string(),
+        Val::Builtin(Rc::new(|args| {
+            if args.len() == 2 {
+                if let Val::Array(arr) = &args[0] {
+                    arr.borrow_mut().push(args[1].clone());
+                }
+            }
             Val::Bos
         })),
     );
@@ -219,6 +256,34 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Val, String> {
                 }
                 Val::Builtin(f) => Ok(f(evaluated_args)),
                 _ => Err(format!("HATA: '{}' bir işlev değil", name)),
+            }
+        }
+        Expr::Array(elements) => {
+            let mut vals = Vec::new();
+            for el in elements {
+                vals.push(eval_expr(el, env)?);
+            }
+            Ok(Val::Array(Rc::new(RefCell::new(vals))))
+        }
+        Expr::Index(array_expr, index_expr) => {
+            let arr_val = eval_expr(array_expr, env)?;
+            let idx_val = eval_expr(index_expr, env)?;
+            match arr_val {
+                Val::Array(arr) => {
+                    match idx_val {
+                        Val::Number(n) => {
+                            let idx = n as usize;
+                            let items = arr.borrow();
+                            if idx < items.len() {
+                                Ok(items[idx].clone())
+                            } else {
+                                Err(format!("HATA: Dizi sınırları dışında erişim: indeks {}, boyut {}", idx, items.len()))
+                            }
+                        }
+                        _ => Err("HATA: Dizi indeksi sayı olmak zorundadır".to_string()),
+                    }
+                }
+                _ => Err("HATA: Sadece diziler indekslenebilir".to_string()),
             }
         }
     }
@@ -411,6 +476,23 @@ mod tests {
         assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
         let (_, env) = res.unwrap();
         assert_eq!(env.get("limit"), Some(Val::Number(5.0)));
+    }
+
+    #[test]
+    fn test_diziler() {
+        let src = r#"
+            dizi = [10, 20, 30];
+            ekle(dizi, 40);
+            birinci = dizi[0];
+            ikinci = dizi'nin 1'inci elemanı;
+            eleman_sayisi = boyut(dizi);
+        "#;
+        let res = run_src(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, env) = res.unwrap();
+        assert_eq!(env.get("birinci"), Some(Val::Number(10.0)));
+        assert_eq!(env.get("ikinci"), Some(Val::Number(20.0)));
+        assert_eq!(env.get("eleman_sayisi"), Some(Val::Number(4.0)));
     }
 }
 

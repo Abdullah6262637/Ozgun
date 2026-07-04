@@ -84,6 +84,12 @@ pub enum Token {
     #[token(";")]
     Semicolon,
 
+    #[token("[")]
+    LBracket,
+
+    #[token("]")]
+    RBracket,
+
     // Literals & Identifiers
     #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().to_string())]
     Number(String),

@@ -1,5 +1,7 @@
 use crate::instruction::{Instruction, Val};
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 struct Frame {
     return_address: usize,
@@ -18,6 +20,8 @@ impl VM {
     pub fn new(instructions: Vec<Instruction>) -> Self {
         let mut globals = HashMap::new();
         globals.insert("yazdır".to_string(), Val::Builtin("yazdır".to_string()));
+        globals.insert("boyut".to_string(), Val::Builtin("boyut".to_string()));
+        globals.insert("ekle".to_string(), Val::Builtin("ekle".to_string()));
 
         VM {
             instructions,
@@ -222,10 +226,47 @@ impl VM {
                                         Val::String(s) => print!("{}", s),
                                         Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
                                         Val::Bos => print!("boş"),
+                                        Val::Array(arr) => {
+                                            let items = arr.borrow();
+                                            print!("[");
+                                            for (idx, item) in items.iter().enumerate() {
+                                                if idx > 0 {
+                                                    print!(", ");
+                                                }
+                                                match item {
+                                                    Val::Number(n) => print!("{}", n),
+                                                    Val::String(s) => print!("{}", s),
+                                                    Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
+                                                    Val::Bos => print!("boş"),
+                                                    _ => print!("{:?}", item),
+                                                }
+                                            }
+                                            print!("]");
+                                        }
                                         _ => print!("{:?}", arg),
                                     }
                                 }
                                 println!();
+                                self.stack.push(Val::Bos);
+                            } else if name == "boyut" {
+                                if *arg_count != 1 {
+                                    return Err("HATA: boyut() tek bir parametre alır".to_string());
+                                }
+                                let arg = self.stack.pop().ok_or("HATA: Yığın boş (boyut)")?;
+                                if let Val::Array(arr) = arg {
+                                    self.stack.push(Val::Number(arr.borrow().len() as f64));
+                                } else {
+                                    self.stack.push(Val::Number(0.0));
+                                }
+                            } else if name == "ekle" {
+                                if *arg_count != 2 {
+                                    return Err("HATA: ekle() iki parametre alır".to_string());
+                                }
+                                let val = self.stack.pop().ok_or("HATA: Yığın boş (ekle val)")?;
+                                let arr_val = self.stack.pop().ok_or("HATA: Yığın boş (ekle arr)")?;
+                                if let Val::Array(arr) = arr_val {
+                                    arr.borrow_mut().push(val);
+                                }
                                 self.stack.push(Val::Bos);
                             } else {
                                 return Err(format!("HATA: Bilinmeyen dahili işlev '{}'", name));
@@ -239,6 +280,35 @@ impl VM {
                     let frame = self.frames.pop().ok_or("HATA: Çerçeve yığını boş (Return)")?;
                     self.ip = frame.return_address;
                     self.stack.push(ret_val);
+                }
+                Instruction::Array(size) => {
+                    let mut elements = Vec::new();
+                    for _ in 0..*size {
+                        elements.push(self.stack.pop().ok_or("HATA: Yığın boş (Array)")?);
+                    }
+                    elements.reverse();
+                    self.stack.push(Val::Array(Rc::new(RefCell::new(elements))));
+                }
+                Instruction::Index => {
+                    let index_val = self.stack.pop().ok_or("HATA: Yığın boş (Index idx)")?;
+                    let array_val = self.stack.pop().ok_or("HATA: Yığın boş (Index arr)")?;
+                    match array_val {
+                        Val::Array(arr) => {
+                            match index_val {
+                                Val::Number(n) => {
+                                    let idx = n as usize;
+                                    let items = arr.borrow();
+                                    if idx < items.len() {
+                                        self.stack.push(items[idx].clone());
+                                    } else {
+                                        return Err(format!("HATA: Dizi sınırları dışında: indeks {}, boyut {}", idx, items.len()));
+                                    }
+                                }
+                                _ => return Err("HATA: Dizi indeksi sayı olmalıdır".to_string()),
+                            }
+                        }
+                        _ => return Err("HATA: Sadece diziler indekslenebilir".to_string()),
+                    }
                 }
             }
         }

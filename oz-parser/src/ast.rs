@@ -29,6 +29,8 @@ pub enum Expr {
     Identifier(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Call(String, Vec<Expr>),
+    Array(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

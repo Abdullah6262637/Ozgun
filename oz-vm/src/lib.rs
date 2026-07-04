@@ -76,4 +76,21 @@ mod tests {
         let (_, vm) = res.unwrap();
         assert_eq!(vm.get_global("limit"), Some(Val::Number(5.0)));
     }
+
+    #[test]
+    fn test_diziler() {
+        let src = r#"
+            dizi = [10, 20, 30];
+            ekle(dizi, 40);
+            birinci = dizi[0];
+            ikinci = dizi'nin 1'inci elemanı;
+            eleman_sayisi = boyut(dizi);
+        "#;
+        let res = run_bytecode(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, vm) = res.unwrap();
+        assert_eq!(vm.get_global("birinci"), Some(Val::Number(10.0)));
+        assert_eq!(vm.get_global("ikinci"), Some(Val::Number(20.0)));
+        assert_eq!(vm.get_global("eleman_sayisi"), Some(Val::Number(4.0)));
+    }
 }
