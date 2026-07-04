@@ -1,7 +1,13 @@
-# Lokal Değişken Slot-Index Optimizasyonu
+# Lokal Değişken Slot-Index Optimizasyon Belgesi
 
-VM performansını artırmak amacıyla lokal değişken erişimleri optimize edilmiştir.
+Yerel değişken erişimlerindeki performans artışının detayları.
 
-## Optimizasyon Detayları
-- **Eski Yapı**: Her yerel değişken string anahtarlı bir HashMap'te aranıyordu.
-- **Yeni Yapı**: Yerel değişkenler derleme zamanında `u16` tipinde indekslere çözümlenir ve Frame içindeki `slots` dizisinde O(1) hızında erişilir.
+## 1. Eski HashMap Tabanlı Çözüm
+Eski mimaride, her fonksiyon çağrısında yerel değişkenler string anahtarlı bir `HashMap` içinde saklanıyordu. Bu durum:
+- Her değişken okuma/yazma işleminde string hashing maliyetine yol açıyordu.
+- Değişkenlerin Heap üzerinde sürekli tahsis edilmesini (allocation) gerektiriyordu.
+
+## 2. Yeni Slot-Index Çözümü
+- Derleme aşamasında yerel değişkenlere `0`, `1`, `2` gibi slot numaraları atanır.
+- VM Frame yapısında `slots: Vec<Val>` tutulur.
+- Değişken erişimleri `LoadLocal(slot)` ve `StoreLocal(slot)` opkodları ile doğrudan dizi erişimi hızında O(1) olarak gerçekleştirilir.

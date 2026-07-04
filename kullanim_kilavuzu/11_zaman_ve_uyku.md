@@ -1,20 +1,21 @@
 # Zaman Yönetimi: şimdi ve uyku
 
-Zaman işlemleri ve yürütmeyi geciktirme fonksiyonları.
+TİLK dilinde zaman ölçümü ve thread duraklatma işlemleri.
 
-## Şimdiki Zaman (`şimdi`)
-Unix zaman damgasını (milisaniye cinsinden) döner:
+## 1. Unix Zaman Damgası (`şimdi`)
+`şimdi()` veya `simdi()` fonksiyonu, sistemin o anki milisaniye cinsinden Unix epoch zaman damgasını döner:
 ```oz
-başlangıç = şimdi();
-// işlemler...
-bitiş = şimdi();
-yazdır("Geçen süre:", bitiş - başlangıç, "ms");
+baslangic = şimdi();
+uyku(500); // yarım saniye duraklat
+bitis = şimdi();
+
+yazdır("Geçen süre:", bitis - baslangic, "milisaniye");
 ```
 
-## Yürütmeyi Duraklatma (`uyku`)
-Belirtilen milisaniye kadar aktif thread'i uyutur:
+## 2. Geciktirme (`uyku`)
+Milisaniye cinsinden belirtilen süre boyunca thread yürütmesini tamamen duraklatır:
 ```oz
-yazdır("Bekleniyor...");
-uyku(2000); // 2 saniye uyutur
-yazdır("Devam ediyor.");
+yazdır("Başlatılıyor...");
+uyku(2000); // 2 saniye bekler
+yazdır("2 saniye geçti.");
 ```

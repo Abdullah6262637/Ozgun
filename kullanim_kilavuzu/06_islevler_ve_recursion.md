@@ -1,27 +1,29 @@
-# İşlevler ve Özyinelemeli (Recursive) Yapılar
+# İşlevler (Fonksiyonlar) ve Özyinelemeli (Recursive) Programlama
 
-İşlevler, tekrar kullanılabilir kod blokları tanımlamamızı sağlar.
+İşlevler, dildeki modüler kod bloklarıdır. `işlev` anahtar kelimesi ile bildirilirler.
 
-## İşlev Tanımlama
-`işlev` anahtar kelimesi ile bildirilir ve değer döndürmek için `döndür` kullanılır:
+## 1. İşlev Tanımlama ve Değer Döndürme
+Bir işlev birden fazla parametre alabilir ve `döndür` ifadesiyle değer dönebilir:
 ```oz
-işlev çarp(a, b) {
-    döndür a * b;
+işlev alan_hesapla(genişlik, yükseklik) {
+    döndür genişlik * yükseklik;
 }
 
-sonuç = çarp(5, 6);
-yazdır(sonuç); // 30
+sonuç = alan_hesapla(10, 5);
+yazdır("Alan:", sonuç); // 50
 ```
+Eğer `döndür` ifadesi kullanılmazsa, işlev varsayılan olarak `boş` (Bos) değerini döndürür.
 
-## Özyinelemeli (Recursive) İşlevler
-Bir işlev kendi kendini çağırabilir. Klasik fibonacci örneği:
+## 2. Özyinelemeli (Recursive) İşlevler
+TİLK, fonksiyonların kendi kendini çağırmasını (recursion) ve yığın yönetimini Call Frame mimarisi ile tam olarak destekler:
 ```oz
-işlev fib(n) {
+işlev faktöriyel(n) {
     n <= 1 ise {
-        döndür n;
+        döndür 1;
     }
-    döndür fib(n - 1) + fib(n - 2);
+    döndür n * faktöriyel(n - 1);
 }
 
-yazdır(fib(7)); // 13
+yazdır(faktöriyel(5)); // 120
 ```
+Özyinelemeli her çağrıda yeni bir sanal makine Frame'i oluşturulur ve yerel değişkenler bu frame içinde izole edilir.

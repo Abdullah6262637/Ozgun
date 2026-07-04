@@ -1,9 +1,17 @@
-# Sanal Makine (VM) Yığın Mimarisi
+# Sanal Makine (VM) Yığın ve Yürütme Mimarisi
 
-TİLK sanal makinesi (VM) yığın tabanlı çalışan yüksek performanslı bir motordur.
+TİLK Sanal Makinesi (VM) yığın tabanlı bir sanal makinedir.
 
-## Yığın (Stack) Mantığı
-Tüm aritmetik ve mantıksal işlemler yığın tepesindeki değerleri pop ederek yürütülür ve sonuç tekrar yığına push edilir.
+## 1. VM Yapısı
+```rust
+pub struct VM {
+    instructions: Vec<Instruction>, // Çalıştırılacak opkodlar
+    ip: usize,                      // Program sayacı
+    stack: Vec<Val>,               // Veri yığını
+    globals: HashMap<String, Val>, // Global değişkenler
+    frames: Vec<Frame>,            // Çağrı çerçeveleri
+}
+```
 
-## Call Frame (Yürütme Çerçeveleri)
-Her fonksiyon çağrısı yeni bir call frame oluşturur. Bu frame çağrı bittiğinde yığından temizlenir.
+## 2. Yürütme Döngüsü
+Sanal makine, `ip` adresindeki talimatı okur (fetch), çözer (decode) ve yürütür (execute). `Return` opkodu gelene veya program sonlanana kadar döngü devam eder. Aritmetik operasyonlar doğrudan stack üzerinde pop/push ile yapılır.

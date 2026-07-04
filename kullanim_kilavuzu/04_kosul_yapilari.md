@@ -1,27 +1,34 @@
-# Koşul Yapıları: ise, se ve değilse
+# Koşullu İfadeler: ise, se ve değilse Yapısı
 
-TİLK dilinde karar mekanizmaları Türkçenin şart kipi ekleri (`-ise` / `-se`) kullanılarak inşa edilir.
+TİLK koşul yapıları, dilde Türkçe mantığının en belirgin olduğu yerlerden biridir.
 
-## Temel Kullanım
-Koşul ifadesinden hemen sonra `ise` veya `se` anahtar kelimesi gelir:
+## 1. Temel Yapı ve Sözdizimi
+Şart cümleleri `ise` veya `se` ekiyle sonlanır:
 ```oz
-yaş = 20;
-yaş >= 18 ise {
-    yazdır("Ehliyet alabilirsiniz.");
+sayı = 8;
+sayı > 5 ise {
+    yazdır("Sayı 5'ten büyüktür.");
 } değilse {
-    yazdır("Yaşınız yetersiz.");
+    yazdır("Sayı 5 veya daha küçüktür.");
 }
 ```
 
-## Çoklu Koşullar
-Koşullar `değilse` blokları ile zincirlenebilir:
+## 2. Değilse İse Zinciri
+Koşullar `değilse` bloğu üzerinden yeni bir `ise` ile zincirlenebilir:
 ```oz
-notu = 85;
-notu >= 90 ise {
-    yazdır("Harika!");
-} notu >= 70 ise {
-    yazdır("Başarılı.");
+sıcaklık = 25;
+
+sıcaklık > 30 ise {
+    yazdır("Hava çok sıcak.");
+} sıcaklık > 15 ise {
+    yazdır("Hava ılık.");
 } değilse {
-    yazdır("Kaldı.");
+    yazdır("Hava soğuk.");
 }
 ```
+
+## 3. VM Düzeyinde Çalışma Mantığı
+Derleyici, koşullu ifadeyi derlerken:
+1. Koşul ifadesini derler (sonuç stack tepesine gelir).
+2. `JumpIfFalse(target)` opkodunu üretir. Eğer koşul yanlış ise target etiketine atlanır.
+3. Koşul doğru ise gövde (`then_block`) çalıştırılır, ardından `Jump(end)` ile `değilse` bloğu atlanır.

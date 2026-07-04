@@ -1,17 +1,14 @@
-# Ariadne ile Görsel Hata Teşhis Sistemi
+# Ariadne ile Görsel Hata Raporlama Sistemi
 
-TİLK, geliştirici dostu renkli hata teşhislerine sahiptir.
+TİLK dilinin hata raporlama yeteneklerinin detaylı analizi.
 
-## Çalışma Prensibi
-Hata oluştuğunda, hata yapan kod satırı terminale görsel olarak basılır ve hatanın yeri oklarla işaretlenir.
+## 1. Ariadne Entegrasyonu
+Hataların terminalde görsel olarak sunulması için Rust'ın popüler `ariadne` diagnostik raporlama kütüphanesi kullanılmıştır.
 
-## Örnek Çıktı
-```
-Error: Sayı bekleniyordu
-   ╭─[test.oz:1:13]
-   │
- 1 │ sayı = 5 + * 4 ;
-   │             ┬  
-   │             ╰── Dosya sonu
-───╯
-```
+## 2. Görsel Hata Yapısı
+Hata oluştuğunda terminale şu şablonda çıktı üretilir:
+- Hatanın kısa açıklaması ve hata kodu.
+- Hatanın oluştuğu dosya adı, satır ve sütun numaraları.
+- Hatalı kod bloğunun görselleştirilmiş hali ve hatanın tam yerini işaret eden oklar.
+
+Bu sayede geliştirici karmaşık hata logları arasında kaybolmadan hatayı saniyeler içinde düzeltebilir.

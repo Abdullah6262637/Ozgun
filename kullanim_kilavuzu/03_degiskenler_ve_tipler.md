@@ -1,20 +1,21 @@
-# Değişken Tanımlama ve Veri Tipleri
+# Değişkenler, Değerler ve Tilk Tip Sistemi
 
-TİLK dilinde değişkenler dinamik tiplidir ancak statik tip kontrol mekanizması ile derleme zamanında doğrulanırlar.
+TİLK, dinamik tipli bir dil olmakla birlikte arka planda güçlü bir statik tip çıkarım ve unification (birleştirme) mekanizması barındırır.
 
-## Değişken Tanımlama
-Bir değişkene değer atandığı an tanımlanmış olur:
+## 1. Değişken Tanımlama ve Kapsam (Scope)
+Değişkenler ilk atama yapıldıkları anda declare edilirler. Değişken isimleri Unicode uyumludur:
 ```oz
-sayı = 42;
-ad = "Tilk";
-durum = doğru;
-değer = boş;
+sayı = 100;
+metin = "Tilk Dili";
+noktalı_sayı = 3.14;
 ```
+Yerel değişkenler fonksiyon scope'u içinde geçerlidir. `compiler.rs` yerel değişkenleri slot indekslerine çözümlerken, global değişkenler çalışma zamanında isim tabanlı aranır.
 
-## Veri Tipleri
-1. **Sayı (`Number`)**: 64-bit kayan noktalı sayılardır (örn: `10`, `3.14`).
-2. **Metin (`String`)**: Çift tırnakla çevrelenen karakter dizileridir (örn: `"Merhaba"`).
+## 2. Veri Tipleri (Val Tipleri)
+VM ve Yorumlayıcı düzeyinde şu temel veri tipleri işlenir:
+1. **Sayı (`Number`)**: 64-bit kayan noktalı (double-precision) IEEE 754 sayılarıdır.
+2. **Metin (`String`)**: UTF-8 formatında byte dizileridir. Kaçış karakterlerini (`\n`, `\t` vb.) destekler.
 3. **Boolean**: Mantıksal `doğru` ve `yanlış` değerleridir.
-4. **Boş (`Bos`)**: Değersizliği ifade eden `boş` sabitidir.
-5. **Dizi (`Array`)**: `[1, 2, 3]` şeklinde tanımlanan dinamik listelerdir.
-6. **Harita (`Map`)**: `{"anahtar": "değer"}` şeklindeki key-value koleksiyonlarıdır.
+4. **Boş (`Bos`)**: Değerin olmadığını veya fonksiyonun hiçbir şey döndürmediğini ifade eder.
+5. **Dizi (`Array`)**: Dinamik yığın bellek (heap) üzerinde Rc<RefCell<Vec<Val>>> olarak tutulan koleksiyonlardır.
+6. **Harita (`Map`)**: Anahtarları metin olan Rc<RefCell<HashMap<String, Val>>> koleksiyonlarıdır.

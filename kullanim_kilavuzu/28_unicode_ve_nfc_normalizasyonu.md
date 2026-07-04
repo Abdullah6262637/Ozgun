@@ -1,6 +1,9 @@
-# Unicode ve NFC Normalizasyon Kuralları
+# Unicode ve NFC Harf Normalizasyonu Kuralları
 
-Türkçe büyük/küçük harf dönüşümleri ve unicode normalizasyon kuralları.
+Türkçe karakterlerin büyük/küçük harf dönüşümlerindeki kararsızlıkların çözümü.
 
-## NFC Normalizasyonu
-Lowersacing işlemleri sırasında unicode decomposed karakterlerin uyuşmazlık yaratmaması için tüm metinler `unicode-normalization` kütüphanesi ile NFC formatına dönüştürülür.
+## 1. Türkçe I/İ Harf Problemi
+ASCII tabanlı sistemlerde büyük `İ` harfi küçük harfe dönüştürülürken noktalı `i` yapılamaz. TİLK bu sorunu özel `turkish_lowercase` fonksiyonu ile aşar.
+
+## 2. Unicode Normalizasyonu
+Karakterlerin uyuşmazlık yaratmaması için tüm kod metni sözcüksel analiz öncesinde `unicode-normalization` kütüphanesi kullanılarak NFC (Normalization Form Canonical Composition) formatına dönüştürülür.

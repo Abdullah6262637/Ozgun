@@ -1,13 +1,16 @@
-# Logos Lexer ve Token Yapısı
+# Logos Lexer ve Token Yapılandırması
 
-TİLK sözcüksel analizcisi Rust'ın `logos` crate'ini kullanır.
+Sözcüksel analiz (lexing) aşamasının detayları.
 
-## Kesme İşareti Yoksayma
-Türkçe kesme işaretleri (`'`) lexer seviyesinde otomatik olarak yok sayılır:
+## 1. Logos Entegrasyonu
+`oz-lexer` modülü, Rust'ın compile-time DFA üreteci `logos` kütüphanesini kullanır. Bu sayede sıfır bellek kopyalamalı (zero-copy) kelime analizi yapılır.
+
+## 2. Kesme İşareti Skip Kuralları
+Türkçe sonekleri (`1'den`, `limit'e`) ayırmak için kesme işareti whitespace'ler gibi skip edilir:
 ```rust
 #[logos(skip r"[ \t\n\f']+")]
 ```
-Bu sayede `5'ten` yazıldığında `5` ve `ten` tokenları elde edilir.
+Böylece `1'den` girdisi `1` (Sayı) ve `den` (Tanımlayıcı) olarak ayrışır.
 
-## String Escape Karakterleri
-Çift tırnak içindeki `\n`, `\t`, `\r`, `\"` ve `\\` kaçış dizilimleri lexer tarafından çözülerek String token'ına dönüştürülür.
+## 3. String Escape Kuralları
+Metin içindeki kaçış karakterleri (`\n`, `\t` vb.) lexer tarafından state-machine ile çözümlenerek String token'ına yazılır.

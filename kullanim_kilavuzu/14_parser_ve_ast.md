@@ -1,9 +1,12 @@
-# Chumsky Parser ve AST Yapısı
+# Chumsky Parser ve AST Span Yönetimi
 
-Ayrıştırma (parsing) aşaması Chumsky parser combinator altyapısını kullanır.
+TİLK parser mimarisi ve Soyut Sözdizimi Ağacı.
 
-## Soyut Sözdizimi Ağacı (AST)
-Her bir ifade (`Expr`) ve deyim (`Statement`), kaynak kodundaki konumunu belirten `Span` bilgisiyle sarmalanır:
+## 1. Chumsky Kombinatörleri
+`oz-parser` modülü, Chumsky parser combinator kütüphanesini kullanır. Hata toleransı (error recovery) ve dinamik sonek filtrelemesi (`suffix_parser`) bu aşamada koşturulur.
+
+## 2. Span Sarmalı (`Spanned`)
+Her bir AST ifadesi ve deyimi, kaynak kodundaki karakter aralığını (`Span`) taşıyan `Spanned<T>` yapısı ile sarmalanır:
 ```rust
 pub type Span = std::ops::Range<usize>;
 
@@ -12,4 +15,4 @@ pub struct Spanned<T> {
     pub span: Span,
 }
 ```
-Bu sayede hata raporlamalarında hatanın tam koordinatları verilebilir.
+Bu sayede tip denetleyici veya derleyici bir hata fırlattığında hatanın kaynak kodunda tam olarak nerede oluştuğu tespit edilebilir.

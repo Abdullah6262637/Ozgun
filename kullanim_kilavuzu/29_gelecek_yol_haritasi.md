@@ -1,8 +1,12 @@
-# Tilk Dili Yol Haritası
+# Gelecek Planı ve 500x Ölçeklendirme Stratejisi
 
-TİLK gelecekteki gelişim hedefleri.
+TİLK projesinin gelecekteki gelişim hedefleri.
 
-## Yol Haritası Hedefleri
-1. Cranelift JIT/AOT derleyici arka ucu.
-2. WebAssembly (Wasm) doğrudan derleme desteği.
-3. Kapsamlı standart kütüphane (ağ, soket, grafik arayüzü).
+## 1. Cranelift JIT Derleyici
+Sanal makine yorumlama döngüsünü aşarak, kodları çalışma zamanında makine koduna (Just-In-Time) derleyen bir Cranelift arka ucu yazılması.
+
+## 2. WebAssembly (Wasm) Desteği
+TİLK kodlarının doğrudan Wasm formatına derlenerek web tarayıcılarında native hızda çalıştırılması.
+
+## 3. Standart Kitaplık
+Dosya, ağ soketleri, HTTP istemcisi ve grafik arayüzü (GUI) sunan geniş bir standart kitaplık ekosisteminin kurulması.

@@ -1,22 +1,23 @@
-# Asenkron Görevler: arkaplanda_çalıştır ve tamamlanınca
+# Asenkron Programlama: arkaplanda_çalıştır ve tamamlanınca
 
-TİLK dili, arka planda çalışan görevleri (asynchronous tasks) yerleşik olarak destekler.
+TİLK, uzun süren işlemlerin ana thread'i bloke etmesini engellemek için yerleşik asenkron görev desteği barındırır.
 
-## Görev Başlatma
-`arkaplanda_çalıştır` ile bir işlev asenkron bir göreve dönüştürülür:
+## 1. Görev Oluşturma (`arkaplanda_çalıştır`)
+Bir işlev çağrısı `arkaplanda_çalıştır` ile sarmalandığında, işletim sisteminde asenkron bir thread başlatılır ve bir `Task` nesnesi dönülür:
 ```oz
-işlev uzun_süren_iş() {
-    uyku(1000); // 1 saniye bekle
-    döndür 42;
+işlev api_istegi() {
+    uyku(1500); // 1.5 saniye simüle et
+    döndür "veri_geldi";
 }
 
-görev = arkaplanda_çalıştır(uzun_süren_iş);
+görev = arkaplanda_çalıştır(api_istegi);
 ```
 
-## Tamamlanınca Bloğu (`tamamlaninca`)
-Görev bittiğinde elde edilen sonuç ile tetiklenen bloktur:
+## 2. Görev Sonucu (`tamamlanınca`)
+Asenkron başlatılan görevin tamamlanmasını beklemek ve sonucunu işlemek için `tamamlanınca` deyimi kullanılır:
 ```oz
 görev tamamlanınca {
-    yazdır("Görev sonucu geldi:", sonuç);
+    // Sonuç otomatik olarak 'sonuç' veya 'sonuc' değişkenine atanır.
+    yazdır("İşlem tamamlandı, gelen sonuç:", sonuç);
 }
 ```

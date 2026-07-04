@@ -1,26 +1,29 @@
-# Diziler ve Haritalar
+# Diziler ve Haritalar: Veri Yapıları Kılavuzu
 
-TİLK, dinamik koleksiyonlar olan dizileri (Arrays) ve haritaları (Maps) yerleşik olarak destekler.
+TİLK, dinamik veri yapılarını referans tipleri olarak yönetir.
 
-## Diziler
-Diziler köşeli parantez içinde tanımlanır:
+## 1. Diziler (Arrays)
+Diziler köşeli parantezler `[...]` ile tanımlanır ve sıfır tabanlı indeksleme kullanır:
 ```oz
-liste = [10, 20, 30];
-yazdır(liste[0]); // 10
+dizi = [10, 20, 30];
+yazdır(dizi[0]); // 10
 
 // Eleman güncelleme
-liste[1] = 99;
+dizi[1] = 99;
 
-// Eleman ekleme ve boyut alma
-ekle(liste, 40);
-yazdır(boyut(liste)); // 4
+// Dahili fonksiyonlar
+ekle(dizi, 40); // dizi sonuna 40 ekler
+yazdır("Boyut:", boyut(dizi)); // 4
 ```
 
-## Haritalar
-Anahtar-değer çiftlerinden oluşur:
+## 2. Haritalar (Maps)
+Haritalar anahtar-değer (key-value) çiftlerini depolar. Anahtarlar her zaman metindir:
 ```oz
-sözlük = {"ad": "Tilk", "yas": 4};
-yazdır(sözlük["ad"]); // Tilk
+harita = {"ad": "Tilk", "surum": "1.0"};
+yazdır(harita["ad"]); // Tilk
 
-sözlük["yas"] = 5;
+// Yeni anahtar ekleme veya güncelleme
+harita["yas"] = 4;
+yazdır(boyut(harita)); // 3
 ```
+Harita ve diziler Heap üzerinde barındırılır ve `Rc<RefCell<...>>` ile paylaşımlı referans olarak yönetilirler.

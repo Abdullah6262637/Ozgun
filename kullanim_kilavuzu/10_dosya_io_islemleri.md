@@ -1,22 +1,24 @@
-# Dosya Giriş/Çıkış (I/O) İşlemleri
+# Dosya Giriş/Çıkış (I/O) İşlemleri Kılavuzu
 
-TİLK dili dosya sistemine erişim için dahili fonksiyonlar sunar.
+TİLK dilinin dosya sistemi ile iletişim kurmasını sağlayan yerleşik I/O fonksiyonları.
 
-## Dosya Yazma
-`dosya_yaz(yol, içerik)` fonksiyonu belirtilen yola dosya yazar:
+## 1. Dosyaya Yazma (`dosya_yaz`)
+Belirtilen dosya yoluna metin içeriğini yazar. Dosya yoksa oluşturulur, varsa üzerine yazılır:
 ```oz
-dosya_yaz("test.txt", "TİLK dili dosya yazma testi.");
+yol = "gunluk.txt";
+dosya_yaz(yol, "TİLK dosya yazma testi.\nTarih: 2026.");
 ```
 
-## Dosya Okuma
-`dosya_oku(yol)` fonksiyonu dosya içeriğini metin olarak okur:
+## 2. Dosyadan Okuma (`dosya_oku`)
+Belirtilen dosyadaki tüm veriyi metin (`String`) olarak okur:
 ```oz
-içerik = dosya_oku("test.txt");
-yazdır(içerik);
+icerik = dosya_oku("gunluk.txt");
+yazdır("Dosya İçeriği:\n", icerik);
 ```
 
-## Dosya Silme
-`dosya_sil(yol)` fonksiyonu dosyayı siler:
+## 3. Dosya Silme (`dosya_sil`)
+Belirtilen yolu dosya sisteminden temizler:
 ```oz
-dosya_sil("test.txt");
+dosya_sil("gunluk.txt");
 ```
+Dosya işlemleri sırasında oluşabilecek OS hataları VM düzeyinde yakalanabilir.

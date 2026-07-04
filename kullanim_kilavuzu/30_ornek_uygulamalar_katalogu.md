@@ -1,21 +1,26 @@
 # Örnek Uygulamalar Kataloğu
 
-TİLK dilinde yazılmış örnek uygulamalar.
+TİLK dilinin özelliklerini gösteren kapsamlı kod örnekleri.
 
-## 1. Fibonacci
+## 1. Fibonacci Dizisi Hesaplama
 ```oz
 işlev fib(n) {
-    n <= 1 ise { döndür n; }
+    n <= 1 ise {
+        döndür n;
+    }
     döndür fib(n - 1) + fib(n - 2);
 }
-yazdır(fib(10));
+
+yazdır(fib(10)); // 55
 ```
 
-## 2. Faktöriyel
+## 2. Güvenli Dosya Okuma
 ```oz
-işlev fakt(n) {
-    n <= 1 ise { döndür 1; }
-    döndür n * fakt(n - 1);
+işlev oku_ve_yazdır(yol) {
+    içerik = dosya_oku(yol) hata_ise {
+        yazdır("Hata: Dosya okunamadı.");
+        döndür "";
+    };
+    yazdır(içerik);
 }
-yazdır(fakt(5));
 ```

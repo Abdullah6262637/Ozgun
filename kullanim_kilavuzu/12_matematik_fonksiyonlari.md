@@ -1,23 +1,23 @@
-# Dahili Matematik Fonksiyonları
+# Yerleşik Matematiksel Fonksiyonlar Kılavuzu
 
-TİLK, sayısal işlemler için optimize edilmiş matematiksel yardımcılar sunar.
+TİLK sayısal analizler için optimize edilmiş dahili matematiksel opkodlara sahiptir.
 
-## Karekök (`kök`)
-Bir sayının karekökünü hesaplar:
+## 1. Karekök (`kök`)
+Bir sayının karekökünü hesaplar. Negatif değer verilirse çalışma zamanı hatası fırlatır:
 ```oz
-yazdır(kök(16)); // 4.0
-yazdır(karekok(25)); // 5.0 (karekok alias'ı mevcuttur)
+yazdır(kök(9)); // 3.0
+yazdır(karekok(100)); // 10.0 (karekok alias'ı mevcuttur)
 ```
 
-## Üs Alma (`üs`)
-Taban ve üs alarak üs hesaplar:
+## 2. Üs Alma (`üs`)
+Tabanın, üs derecesinden kuvvetini hesaplar:
 ```oz
-yazdır(üs(2, 3)); // 8.0
-yazdır(ust(3, 2)); // 9.0 (ust alias'ı mevcuttur)
+yazdır(üs(2, 8)); // 256.0
+yazdır(ust(5, 3)); // 125.0 (ust alias'ı mevcuttur)
 ```
 
-## Mutlak Değer (`mutlak`)
-Sayının mutlak değerini alır:
+## 3. Mutlak Değer (`mutlak`)
+Negatif veya pozitif sayıların işaretsiz mutlak değerini döner:
 ```oz
-yazdır(mutlak(-5)); // 5.0
+yazdır(mutlak(-42.5)); // 42.5
 ```

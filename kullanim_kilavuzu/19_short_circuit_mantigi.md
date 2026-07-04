@@ -1,8 +1,11 @@
-# Kısa Devre (Short-Circuit) Değerlendirmesi
+# Kısa Devre (Short-Circuit) Optimizasyonu
 
-Mantıksal `ve` ile `veya` operatörlerinin kısa devre tasarımı.
+Mantıksal VE/VEYA operatörlerinin performansı artırmak için kısa devre değerlendirilmesi.
 
-## Çalışma Mantığı
-- **VE (`ve`)**: Sol taraf `yanlış` ise sağ taraf hiç çalıştırılmaz, doğrudan yanlış döner.
-- **VEYA (`veya`)**: Sol taraf `doğru` ise sağ taraf hiç çalıştırılmaz, doğrudan doğru döner.
-Bu mekanizma VM'e eklenen `JumpIfFalseKeep` ve `JumpIfTrueKeep` opkodları ile sağlanır.
+## 1. Çalışma Mantığı
+TİLK derleyicisi mantıksal operatörleri derlerken şu stratejiyi izler:
+- **VE (`ve`)**: Sol taraftaki ifade yanlış (false) ise, sağ taraftaki ifadenin sonucuna bakılmaksızın tüm mantıksal işlem yanlıştır.
+- **VEYA (`veya`)**: Sol taraftaki ifade doğru (true) ise, sağ tarafın sonucuna bakılmaksızın tüm işlem doğrudur.
+
+## 2. VM Opcodları
+Bu kısa devre akışını yönetmek için yığındaki değeri pop etmeden kontrol eden `JumpIfFalseKeep` ve `JumpIfTrueKeep` opkodları kullanılır. Bu sayede sol tarafın sonucu yığında korunarak doğrudan atlama sağlanır.
