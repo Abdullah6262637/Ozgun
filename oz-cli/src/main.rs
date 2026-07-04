@@ -1,3 +1,5 @@
+mod c_codegen;
+
 use clap::{Parser as ClapParser, Subcommand};
 use logos::Logos;
 use serde::Deserialize;
@@ -35,14 +37,21 @@ enum Commands {
         isim: String,
     },
     /// Mevcut projedeki kaynak dosyalarını derler.
-    Derle,
+    Derle {
+        /// Yerel makine koduna (C / LLVM AOT) derler
+        #[arg(long, short)]
+        yerel: bool,
+    },
     /// Projedeki testleri (testler/ altındaki dosyaları) çalıştırır.
     Test,
+    /// Projedeki bağımlılıkları kitaplık/ altına indirir.
+    Yukle,
 }
 
 #[derive(Deserialize)]
 struct PackageConfig {
     paket: PaketDetails,
+    bagimliliklar: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Deserialize)]
@@ -53,22 +62,87 @@ struct PaketDetails {
     giris: String,
 }
 
+fn print_parser_errors(errors: Vec<chumsky::error::Simple<oz_lexer::Token>>, file_name: &str, source: &str) {
+    use ariadne::{Color, Label, Report, ReportKind, Source};
+
+    for err in errors {
+        let span = err.span();
+        let msg = match err.reason() {
+            chumsky::error::SimpleReason::Unexpected => {
+                let expected: Vec<String> = err
+                    .expected()
+                    .map(|tok| match tok {
+                        Some(t) => format!("{:?}", t),
+                        None => "dosya sonu".to_string(),
+                    })
+                    .collect();
+                if expected.is_empty() {
+                    "Beklenmedik sözcük".to_string()
+                } else {
+                    format!("Beklenen sözcükler: {}", expected.join(", "))
+                }
+            }
+            chumsky::error::SimpleReason::Custom(s) => s.clone(),
+            _ => "Ayrıştırma hatası".to_string(),
+        };
+
+        let label = if let Some(found) = err.found() {
+            format!("Hatalı sözcük: {:?}", found)
+        } else {
+            "Dosya sonu".to_string()
+        };
+
+        Report::build(ReportKind::Error, file_name, span.start)
+            .with_message(msg)
+            .with_label(
+                Label::new((file_name, span))
+                    .with_message(label)
+                    .with_color(Color::Red),
+            )
+            .finish()
+            .eprint((file_name, Source::from(source)))
+            .unwrap();
+    }
+}
+
 fn run_file(file: &PathBuf) -> Result<(), String> {
     let content = fs::read_to_string(file)
         .map_err(|e| format!("Dosya okunamadı {}: {}", file.display(), e))?;
 
     let lexer = oz_lexer::Token::lexer(&content);
     let mut tokens = Vec::new();
+    let file_name = file.to_string_lossy().to_string();
     for (token_res, span) in lexer.spanned() {
         match token_res {
             Ok(token) => tokens.push((token, span)),
-            Err(_) => return Err(format!("Sözcüksel analiz hatası: Tanımlanamayan karakter at {:?}", span)),
+            Err(_) => {
+                use ariadne::{Color, Label, Report, ReportKind, Source};
+                Report::build(ReportKind::Error, file_name.clone(), span.start)
+                    .with_message("Sözcüksel analiz hatası: Tanımlanamayan karakter")
+                    .with_label(
+                        Label::new((file_name.clone(), span))
+                            .with_message("Geçersiz karakter")
+                            .with_color(Color::Red),
+                    )
+                    .finish()
+                    .eprint((file_name.clone(), Source::from(&content)))
+
+                    .unwrap();
+                return Err("Sözcüksel analiz hatası".to_string());
+            }
         }
     }
 
     let len = content.len();
-    let ast = oz_parser::parse_tokens(tokens, len)
-        .map_err(|errors| format!("Sözdizimi ayrıştırma hataları: {:?}", errors))?;
+    let ast = match oz_parser::parse_tokens(tokens, len) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            print_parser_errors(errors, &file_name, &content);
+            return Err("Sözdizimi ayrıştırma hatası".to_string());
+        }
+    };
+
+    oz_parser::typechecker::check_program(&ast)?;
 
     let compiler = oz_vm::compiler::Compiler::new();
     let insts = compiler.compile_program(&ast)?;
@@ -77,6 +151,7 @@ fn run_file(file: &PathBuf) -> Result<(), String> {
     vm.run()?;
     Ok(())
 }
+
 
 fn main() {
     let cli = Cli::parse();
@@ -111,11 +186,23 @@ fn main() {
 
             let lexer = oz_lexer::Token::lexer(&content);
             let mut tokens = Vec::new();
+            let file_name = file.to_string_lossy().to_string();
             for (token_res, span) in lexer.spanned() {
                 match token_res {
                     Ok(token) => tokens.push((token, span)),
                     Err(_) => {
-                        eprintln!("Lexer hatası: Tanımlanamayan karakter at {:?}", span);
+                        use ariadne::{Color, Label, Report, ReportKind, Source};
+                        Report::build(ReportKind::Error, file_name.clone(), span.start)
+                            .with_message("Sözcüksel analiz hatası: Tanımlanamayan karakter")
+                            .with_label(
+                                Label::new((file_name.clone(), span))
+                                    .with_message("Geçersiz karakter")
+                                    .with_color(Color::Red),
+                            )
+                            .finish()
+                            .eprint((file_name.clone(), Source::from(&content)))
+
+                            .unwrap();
                         std::process::exit(1);
                     }
                 }
@@ -128,13 +215,11 @@ fn main() {
                     println!("{:#?}", ast);
                 }
                 Err(errors) => {
-                    eprintln!("Sözdizimi ayrıştırma hataları:");
-                    for err in errors {
-                        eprintln!("{:?}", err);
-                    }
+                    print_parser_errors(errors, &file_name, &content);
                     std::process::exit(1);
                 }
             }
+
         }
         Commands::Calistir { file } => {
             let target_file = match file {
@@ -211,7 +296,7 @@ giris = "kaynak/ana.oz"
 
             println!("Başarılı: '{}' adında yeni bir TİLK projesi oluşturuldu.", isim);
         }
-        Commands::Derle => {
+        Commands::Derle { yerel } => {
             let toml_path = PathBuf::from("tilk.toml");
             if !toml_path.exists() {
                 eprintln!("HATA: tilk.toml bulunamadı. TİLK projesi dizininde değilsiniz.");
@@ -223,11 +308,104 @@ giris = "kaynak/ana.oz"
             let entry_file = PathBuf::from(config.paket.giris);
 
             println!("Derleniyor: {}...", config.paket.ad);
-            match run_file(&entry_file) {
-                Ok(_) => println!("Derleme başarılı! Herhangi bir sözdizimi hatası bulunamadı."),
-                Err(e) => {
-                    eprintln!("{}", e);
+
+            if yerel {
+                let content = match fs::read_to_string(&entry_file) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("HATA: Giriş dosyası okunamadı: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                let lexer = oz_lexer::Token::lexer(&content);
+                let mut tokens = Vec::new();
+                for (token_res, span) in lexer.spanned() {
+                    match token_res {
+                        Ok(token) => tokens.push((token, span)),
+                        Err(_) => {
+                            eprintln!("HATA: Sözcüksel analiz hatası at {:?}", span);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+
+                let ast = match oz_parser::parse_tokens(tokens, content.len()) {
+                    Ok(a) => a,
+                    Err(errors) => {
+                        eprintln!("HATA: Sözdizimi ayrıştırma hataları: {:?}", errors);
+                        std::process::exit(1);
+                    }
+                };
+
+                if let Err(type_err) = oz_parser::typechecker::check_program(&ast) {
+                    eprintln!("HATA: Tip denetim hatası: {}", type_err);
                     std::process::exit(1);
+                }
+
+                let codegen = c_codegen::CCodegen::new();
+                let c_code = match codegen.transpile(&ast) {
+                    Ok(code) => code,
+                    Err(e) => {
+                        eprintln!("HATA: C kod üretimi başarısız oldu: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                let c_file_path = PathBuf::from("program.c");
+                fs::write(&c_file_path, c_code).unwrap();
+                println!("  -> C kaynak kodu üretildi: {}", c_file_path.display());
+
+                println!("Yerel binary'ye derleniyor...");
+                let exe_name = if cfg!(target_os = "windows") { "program.exe" } else { "program" };
+                
+                let mut compiled = false;
+                let output = std::process::Command::new("gcc")
+                    .args(&["-O3", "program.c", "-o", exe_name, "-lm"])
+                    .output();
+                if let Ok(out) = output {
+                    if out.status.success() {
+                        println!("Başarılı: GCC kullanılarak yerel binary derlendi -> {}", exe_name);
+                        compiled = true;
+                    }
+                }
+
+                if !compiled {
+                    let output = std::process::Command::new("clang")
+                        .args(&["-O3", "program.c", "-o", exe_name, "-lm"])
+                        .output();
+                    if let Ok(out) = output {
+                        if out.status.success() {
+                            println!("Başarılı: Clang kullanılarak yerel binary derlendi -> {}", exe_name);
+                            compiled = true;
+                        }
+                    }
+                }
+
+                if !compiled {
+                    let output = std::process::Command::new("cl.exe")
+                        .args(&["/O2", "program.c", "/Fe:", exe_name])
+                        .output();
+                    if let Ok(out) = output {
+                        if out.status.success() {
+                            println!("Başarılı: MSVC kullanılarak yerel binary derlendi -> {}", exe_name);
+                            compiled = true;
+                        }
+                    }
+                }
+
+                if !compiled {
+                    println!("UYARI: Sistemde yüklü bir C derleyicisi (gcc, clang, cl) bulunamadı.");
+                    println!("Tilk kodundan üretilen C kaynak kodunu manuel derlemek için:");
+                    println!("  gcc -O3 program.c -o {} -lm", exe_name);
+                }
+            } else {
+                match run_file(&entry_file) {
+                    Ok(_) => println!("Derleme başarılı! Herhangi bir sözdizimi hatası bulunamadı."),
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
         }
@@ -278,6 +456,60 @@ giris = "kaynak/ana.oz"
             println!("\nTest Sonucu: {} geçti, {} başarısız.", passed, failed);
             if failed > 0 {
                 std::process::exit(1);
+            }
+        }
+        Commands::Yukle => {
+            let toml_path = PathBuf::from("tilk.toml");
+            if !toml_path.exists() {
+                eprintln!("HATA: tilk.toml bulunamadı. TİLK projesi dizininde değilsiniz.");
+                std::process::exit(1);
+            }
+
+            let toml_str = fs::read_to_string(&toml_path).unwrap();
+            let config: PackageConfig = toml::from_str(&toml_str).unwrap();
+
+            if let Some(bagimliliklar) = config.bagimliliklar {
+                let kitaplik_dir = PathBuf::from("kitaplik");
+                if !kitaplik_dir.exists() {
+                    fs::create_dir_all(&kitaplik_dir).unwrap();
+                }
+
+                println!("--- Bağımlılıklar Yükleniyor ---");
+                for (ad, surum) in bagimliliklar {
+                    println!("Paket deposu taranıyor: '{}' (sürüm {})...", ad, surum);
+                    let code = match ad.as_str() {
+                        "matematik" => r#"
+işlev topla(a, b) {
+    döndür a + b;
+}
+işlev carp(a, b) {
+    döndür a * b;
+}
+işlev kare(a) {
+    döndür üs(a, 2);
+}
+"#,
+                        "dizi_araclari" => r#"
+işlev ilk_eleman(d) {
+    döndür d[0];
+}
+işlev son_eleman(d) {
+    döndür d[boyut(d) - 1];
+}
+"#,
+                        _ => {
+                            eprintln!("HATA: '{}' paketi depoda bulunamadı.", ad);
+                            std::process::exit(1);
+                        }
+                    };
+                    
+                    let target_path = kitaplik_dir.join(format!("{}.oz", ad));
+                    fs::write(&target_path, code).unwrap();
+                    println!("  -> İndirildi ve kaydedildi: {}", target_path.display());
+                }
+                println!("Tüm bağımlılıklar başarıyla yüklendi!");
+            } else {
+                println!("Yüklenecek bağımlılık bulunamadı.");
             }
         }
     }

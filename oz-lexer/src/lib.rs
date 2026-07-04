@@ -1,4 +1,5 @@
 use logos::Logos;
+use unicode_normalization::UnicodeNormalization;
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 #[logos(skip r"[ \t\n\f']+")] // Skip whitespace and Turkish suffix apostrophes (')
@@ -12,6 +13,9 @@ pub enum Token {
 
     #[token("değilse")]
     Degilse,
+
+    #[token("değil")]
+    Degil,
 
     #[token("doğru")]
     Dogru,
@@ -104,9 +108,33 @@ pub enum Token {
     #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().to_string())]
     Number(String),
 
-    #[regex(r#""[^"\\]*""#, |lex| {
+    #[regex(r#""([^"\\]|\\.)*""#, |lex| {
         let s = lex.slice();
-        s[1..s.len()-1].to_string()
+        let inner = &s[1..s.len()-1];
+        let mut res = String::with_capacity(inner.len());
+        let mut chars = inner.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(next) = chars.next() {
+                    match next {
+                        'n' => res.push('\n'),
+                        't' => res.push('\t'),
+                        'r' => res.push('\r'),
+                        '"' => res.push('"'),
+                        '\\' => res.push('\\'),
+                        _ => {
+                            res.push('\\');
+                            res.push(next);
+                        }
+                    }
+                } else {
+                    res.push('\\');
+                }
+            } else {
+                res.push(c);
+            }
+        }
+        res
     })]
     String(String),
 
@@ -119,8 +147,9 @@ pub enum Token {
 
 /// Locale-independent Turkish lowercase normalization to avoid the "Turkish I" bug
 pub fn turkish_lowercase(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for c in s.chars() {
+    let normalized: String = s.nfc().collect();
+    let mut result = String::with_capacity(normalized.len());
+    for c in normalized.chars() {
         match c {
             'İ' => result.push('i'),
             'I' => result.push('ı'),
@@ -133,3 +162,4 @@ pub fn turkish_lowercase(s: &str) -> String {
     }
     result
 }
+

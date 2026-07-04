@@ -5,7 +5,8 @@ members = [
     "oz-parser",
     "oz-cli",
     "oz-interpreter",
-    "oz-vm"
+    "oz-vm",
+    "oz-lsp"
 ]
 
 [workspace.dependencies]
@@ -13,3 +14,5 @@ logos = "0.14"
 chumsky = "0.9.3"
 clap = { version = "4.4", features = ["derive"] }
 ariadne = "0.3.0"
+unicode-normalization = "0.1"
+

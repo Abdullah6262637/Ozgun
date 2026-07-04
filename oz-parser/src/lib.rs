@@ -3,31 +3,34 @@ use oz_lexer::Token;
 use std::ops::Range;
 
 pub mod ast;
+pub mod typechecker;
 use ast::*;
 
-fn num_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
-    filter_map(|span, tok| match tok {
+fn num_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
+    filter_map(|span: Range<usize>, tok| match tok {
         Token::Number(s) => s
             .parse::<f64>()
-            .map(|n| Expr::Literal(Literal::Number(n)))
+            .map(|n| Spanned::new(Expr::Literal(Literal::Number(n)), span.clone()))
             .map_err(|_| Simple::custom(span, "Geçersiz sayı")),
         _ => Err(Simple::custom(span, "Sayı bekleniyordu")),
     })
 }
 
-fn string_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
-    filter_map(|span, tok| match tok {
-        Token::String(s) => Ok(Expr::Literal(Literal::String(s))),
+fn string_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
+    filter_map(|span: Range<usize>, tok| match tok {
+        Token::String(s) => Ok(Spanned::new(Expr::Literal(Literal::String(s)), span)),
         _ => Err(Simple::custom(span, "Metin bekleniyordu")),
     })
 }
 
+
 fn ident_parser() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
-    filter_map(|span, tok| match tok {
+    filter_map(|span: Range<usize>, tok| match tok {
         Token::Identifier(s) => Ok(s),
         _ => Err(Simple::custom(span, "Tanımlayıcı bekleniyordu")),
     })
 }
+
 
 fn suffix_parser(values: &'static [&'static str]) -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
     ident_parser().try_map(move |s, span| {
@@ -39,12 +42,13 @@ fn suffix_parser(values: &'static [&'static str]) -> impl Parser<Token, String, 
     })
 }
 
-fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clone + 'static) -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+fn expr_parser(stmt: impl Parser<Token, Spanned<Statement>, Error = Simple<Token>> + Clone + 'static) -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let array_literal = just(Token::LBracket)
             .ignore_then(expr.clone().separated_by(just(Token::Comma)))
             .then_ignore(just(Token::RBracket))
-            .map(Expr::Array);
+            .map(Expr::Array)
+            .map_with_span(Spanned::new);
 
         let map_literal = just(Token::LBrace)
             .ignore_then(
@@ -54,13 +58,14 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
                     .separated_by(just(Token::Comma)),
             )
             .then_ignore(just(Token::RBrace))
-            .map(Expr::Map);
+            .map(Expr::Map)
+            .map_with_span(Spanned::new);
 
         let literal = num_parser()
             .or(string_parser())
-            .or(just(Token::Dogru).to(Expr::Literal(Literal::Boolean(true))))
-            .or(just(Token::Yanlis).to(Expr::Literal(Literal::Boolean(false))))
-            .or(just(Token::Bos).to(Expr::Literal(Literal::Bos)))
+            .or(just(Token::Dogru).map_with_span(|_, span| Spanned::new(Expr::Literal(Literal::Boolean(true)), span)))
+            .or(just(Token::Yanlis).map_with_span(|_, span| Spanned::new(Expr::Literal(Literal::Boolean(false)), span)))
+            .or(just(Token::Bos).map_with_span(|_, span| Spanned::new(Expr::Literal(Literal::Bos), span)))
             .or(array_literal)
             .or(map_literal);
 
@@ -71,17 +76,21 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
                     .delimited_by(just(Token::LParen), just(Token::RParen))
                     .or_not(),
             )
-            .map(|(name, args)| {
-                if let Some(args) = args {
+            .map_with_span(|(name, args), span| {
+                let node = if let Some(args) = args {
                     Expr::Call(name, args)
                 } else {
                     Expr::Identifier(name)
-                }
+                };
+                Spanned::new(node, span)
             });
 
         let atom = literal
             .or(call_or_var)
-            .or(expr.clone().delimited_by(just(Token::LParen), just(Token::RParen)));
+            .or(expr.clone()
+                .delimited_by(just(Token::LParen), just(Token::RParen))
+                // LParen'dan RParen'a kadar olan span'i koruyalım
+                .map_with_span(|inner, span| Spanned::new(inner.node, span)));
 
         let index_suffix = just(Token::LBracket)
             .ignore_then(expr.clone())
@@ -94,16 +103,30 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
             );
 
         let indexed_atom = atom.then(index_suffix.repeated()).foldl(|array, index| {
-            Expr::Index(Box::new(array), Box::new(index))
+            let span = array.span.start..index.span.end;
+            Spanned::new(Expr::Index(Box::new(array), Box::new(index)), span)
         });
+
+        let unary = just(Token::Minus).to(UnaryOp::Neg)
+            .or(just(Token::Degil).to(UnaryOp::Not))
+            .map_with_span(|op, span| (op, span))
+            .repeated()
+            .then(indexed_atom)
+            .foldr(|(op, op_span), expr| {
+                let span = op_span.start..expr.span.end;
+                Spanned::new(Expr::Unary(op, Box::new(expr)), span)
+            });
 
         // Factor: multiplicative operators
         let op_mul = just(Token::Mul)
             .to(BinaryOp::Mul)
             .or(just(Token::Div).to(BinaryOp::Div))
             .or(just(Token::Mod).to(BinaryOp::Mod));
-        let factor = indexed_atom.then(op_mul.then(expr.clone()).repeated()).foldl(
-            |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
+        let factor = unary.then(op_mul.then(expr.clone()).repeated()).foldl(
+            |lhs, (op, rhs)| {
+                let span = lhs.span.start..rhs.span.end;
+                Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
+            },
         );
 
         // Term: additive operators
@@ -111,7 +134,10 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
             .to(BinaryOp::Add)
             .or(just(Token::Minus).to(BinaryOp::Sub));
         let term = factor.then(op_add.then(expr.clone()).repeated()).foldl(
-            |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
+            |lhs, (op, rhs)| {
+                let span = lhs.span.start..rhs.span.end;
+                Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
+            },
         );
 
         // Comparison
@@ -123,7 +149,10 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
             .or(just(Token::Lt).to(BinaryOp::Lt))
             .or(just(Token::Gt).to(BinaryOp::Gt));
         let comparison = term.then(op_comp.then(expr.clone()).repeated()).foldl(
-            |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
+            |lhs, (op, rhs)| {
+                let span = lhs.span.start..rhs.span.end;
+                Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
+            },
         );
 
         // Logical
@@ -131,7 +160,10 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
             .to(BinaryOp::And)
             .or(just(Token::Or).to(BinaryOp::Or));
         let base_expr = comparison.then(op_logical.then(expr.clone()).repeated()).foldl(
-            |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
+            |lhs, (op, rhs)| {
+                let span = lhs.span.start..rhs.span.end;
+                Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
+            },
         );
 
         let block = stmt
@@ -141,9 +173,9 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
 
         base_expr
             .then(just(Token::HataIse).ignore_then(block).or_not())
-            .map(|(base, body_opt)| {
+            .map_with_span(|(base, body_opt), span| {
                 if let Some(body) = body_opt {
-                    Expr::HataIse(Box::new(base), body)
+                    Spanned::new(Expr::HataIse(Box::new(base), body), span)
                 } else {
                     base
                 }
@@ -151,7 +183,7 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
     })
 }
 
-fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + Clone {
+fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<Token>> + Clone {
     recursive(|stmt| {
         let expr = expr_parser(stmt.clone());
         let block = stmt
@@ -165,9 +197,9 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
             .then(expr.clone())
             .then_ignore(just(Token::Semicolon))
             .try_map(|(lhs, rhs), span| {
-                match lhs {
-                    Expr::Identifier(name) => Ok(Statement::VarDecl(name, rhs)),
-                    Expr::Index(array, index) => Ok(Statement::IndexAssignment(*array, *index, rhs)),
+                match lhs.node {
+                    Expr::Identifier(name) => Ok(Spanned::new(Statement::VarDecl(name, rhs), span)),
+                    Expr::Index(array, index) => Ok(Spanned::new(Statement::IndexAssignment(*array, *index, rhs), span)),
                     _ => Err(Simple::custom(span, "Geçersiz atama hedefi (LHS)")),
                 }
             });
@@ -177,13 +209,15 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
             .then_ignore(suffix_parser(&["ise", "se"]))
             .then(block.clone())
             .then(just(Token::Degilse).ignore_then(block.clone()).or_not())
-            .map(|((cond, then_block), else_block)| Statement::If(cond, then_block, else_block));
+            .map(|((cond, then_block), else_block)| Statement::If(cond, then_block, else_block))
+            .map_with_span(Spanned::new);
 
         // koşul iken { ... }
         let while_stmt = expr.clone()
             .then_ignore(suffix_parser(&["iken"]))
             .then(block.clone())
-            .map(|(cond, body)| Statement::While(cond, body));
+            .map(|(cond, body)| Statement::While(cond, body))
+            .map_with_span(Spanned::new);
 
         // i, 1'den 10'a dek artarak { ... }
         let for_stmt = ident_parser()
@@ -208,7 +242,8 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
                 end,
                 step_dir,
                 body,
-            });
+            })
+            .map_with_span(Spanned::new);
 
         // işlev topla(a, b) { ... }
         let fn_decl = just(Token::Islev)
@@ -219,24 +254,28 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
                     .delimited_by(just(Token::LParen), just(Token::RParen)),
             )
             .then(block.clone())
-            .map(|((name, params), body)| Statement::FnDecl { name, params, body });
+            .map(|((name, params), body)| Statement::FnDecl { name, params, body })
+            .map_with_span(Spanned::new);
 
         // döndür x;
         let return_stmt = just(Token::Dondur)
             .ignore_then(expr.clone().or_not())
             .then_ignore(just(Token::Semicolon))
-            .map(Statement::Return);
+            .map(Statement::Return)
+            .map_with_span(Spanned::new);
 
         // Expression statements (e.g. function calls)
         let expr_stmt = expr.clone()
             .then_ignore(just(Token::Semicolon))
-            .map(Statement::Expr);
+            .map(Statement::Expr)
+            .map_with_span(Spanned::new);
 
         // görev tamamlanınca { ... }
         let tamamlaninca_stmt = expr.clone()
             .then_ignore(just(Token::Tamamlaninca))
             .then(block.clone())
-            .map(|(gorev, body)| Statement::Tamamlaninca(gorev, body));
+            .map(|(gorev, body)| Statement::Tamamlaninca(gorev, body))
+            .map_with_span(Spanned::new);
 
         assign_stmt
             .or(if_stmt)
@@ -252,7 +291,7 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
 pub fn parse_tokens(
     tokens: Vec<(Token, Range<usize>)>,
     len: usize,
-) -> Result<Vec<Statement>, Vec<Simple<Token>>> {
+) -> Result<Vec<Spanned<Statement>>, Vec<Simple<Token>>> {
     let parser = statement_parser().repeated().then_ignore(end());
     let stream = chumsky::Stream::from_iter(
         len..len,
@@ -262,55 +301,5 @@ pub fn parse_tokens(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oz_lexer::Token;
-    use logos::Logos;
+mod tests;
 
-    fn parse_helper(src: &str) -> Result<Vec<Statement>, String> {
-        let lexer = Token::lexer(src);
-        let mut tokens = Vec::new();
-        for (token_res, span) in lexer.spanned() {
-            match token_res {
-                Ok(token) => tokens.push((token, span)),
-                Err(_) => return Err(format!("Lexer hatası: {:?}", span)),
-            }
-        }
-        parse_tokens(tokens, src.len()).map_err(|e| format!("{:?}", e))
-    }
-
-    #[test]
-    fn test_ornek1_kosul() {
-        let src = include_str!("../../examples/ornek1_kosul.oz");
-        let res = parse_helper(src);
-        assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
-    }
-
-    #[test]
-    fn test_ornek2_dongu() {
-        let src = include_str!("../../examples/ornek2_dongu.oz");
-        let res = parse_helper(src);
-        assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
-    }
-
-    #[test]
-    fn test_ornek3_islev() {
-        let src = include_str!("../../examples/ornek3_islev.oz");
-        let res = parse_helper(src);
-        assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
-    }
-
-    #[test]
-    fn test_ornek4_hesap() {
-        let src = include_str!("../../examples/ornek4_hesap.oz");
-        let res = parse_helper(src);
-        assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
-    }
-
-    #[test]
-    fn test_ornek5_karma() {
-        let src = include_str!("../../examples/ornek5_karma.oz");
-        let res = parse_helper(src);
-        assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
-    }
-}

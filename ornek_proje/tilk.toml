@@ -2,3 +2,7 @@
 ad = "ornek_proje"
 surum = "0.1.0"
 giris = "kaynak/ana.oz"
+
+[bagimliliklar]
+matematik = "0.1.0"
+dizi_araclari = "0.1.0"

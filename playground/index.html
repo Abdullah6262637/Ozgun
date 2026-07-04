@@ -958,6 +958,581 @@ yazdır("Güncellenmiş Dizi:", dizi);`
             }
         }
 
+        // 4.4 Static Type Checker (Hindley-Milner)
+        class Type {
+            static Number = { type: 'Number' };
+            static String = { type: 'String' };
+            static Boolean = { type: 'Boolean' };
+            static Bos = { type: 'Bos' };
+            static Array = (inner) => ({ type: 'Array', inner });
+            static Map = (inner) => ({ type: 'Map', inner });
+            static Function = (params, ret) => ({ type: 'Function', params, ret });
+            static Task = (inner) => ({ type: 'Task', inner });
+            static Var = (id) => ({ type: 'Var', id });
+        }
+
+        class JSTypeEnv {
+            constructor(parent = null) {
+                this.bindings = new Map();
+                this.parent = parent;
+            }
+            get(name) {
+                if (this.bindings.has(name)) return this.bindings.get(name);
+                if (this.parent) return this.parent.get(name);
+                return null;
+            }
+            set(name, scheme) {
+                this.bindings.set(name, scheme);
+            }
+        }
+
+        class JSTypeChecker {
+            constructor() {
+                this.nextVar = 0;
+                this.substitutions = new Map();
+            }
+
+            newVar() {
+                return this.nextVar++;
+            }
+
+            resolve(t) {
+                if (t.type === 'Var') {
+                    if (this.substitutions.has(t.id)) {
+                        return this.resolve(this.substitutions.get(t.id));
+                    }
+                }
+                if (t.type === 'Array') {
+                    return { type: 'Array', inner: this.resolve(t.inner) };
+                }
+                if (t.type === 'Map') {
+                    return { type: 'Map', inner: this.resolve(t.inner) };
+                }
+                if (t.type === 'Task') {
+                    return { type: 'Task', inner: this.resolve(t.inner) };
+                }
+                if (t.type === 'Function') {
+                    return {
+                        type: 'Function',
+                        params: t.params.map(p => this.resolve(p)),
+                        ret: this.resolve(t.ret)
+                    };
+                }
+                return t;
+            }
+
+            occursIn(varId, t) {
+                const resolved = this.resolve(t);
+                if (resolved.type === 'Var') return resolved.id === varId;
+                if (resolved.type === 'Array' || resolved.type === 'Map' || resolved.type === 'Task') {
+                    return this.occursIn(varId, resolved.inner);
+                }
+                if (resolved.type === 'Function') {
+                    return resolved.params.some(p => this.occursIn(varId, p)) || this.occursIn(varId, resolved.ret);
+                }
+                return false;
+            }
+
+            typeEq(t1, t2) {
+                const r1 = this.resolve(t1);
+                const r2 = this.resolve(t2);
+                if (r1.type !== r2.type) return false;
+                if (r1.type === 'Var') return r1.id === r2.id;
+                if (r1.type === 'Array' || r1.type === 'Map' || r1.type === 'Task') {
+                    return this.typeEq(r1.inner, r2.inner);
+                }
+                if (r1.type === 'Function') {
+                    if (r1.params.length !== r2.params.length) return false;
+                    for (let i = 0; i < r1.params.length; i++) {
+                        if (!this.typeEq(r1.params[i], r2.params[i])) return false;
+                    }
+                    return this.typeEq(r1.ret, r2.ret);
+                }
+                return true;
+            }
+
+            unify(t1, t2) {
+                const r1 = this.resolve(t1);
+                const r2 = this.resolve(t2);
+                if (this.typeEq(r1, r2)) return;
+
+                if (r1.type === 'Var') {
+                    if (this.occursIn(r1.id, r2)) throw new Error("Tip Hatası: Sonsuz tip (occurs check)");
+                    this.substitutions.set(r1.id, r2);
+                    return;
+                }
+                if (r2.type === 'Var') {
+                    if (this.occursIn(r2.id, r1)) throw new Error("Tip Hatası: Sonsuz tip (occurs check)");
+                    this.substitutions.set(r2.id, r1);
+                    return;
+                }
+                if (r1.type === 'Array' && r2.type === 'Array') {
+                    this.unify(r1.inner, r2.inner);
+                    return;
+                }
+                if (r1.type === 'Map' && r2.type === 'Map') {
+                    this.unify(r1.inner, r2.inner);
+                    return;
+                }
+                if (r1.type === 'Task' && r2.type === 'Task') {
+                    this.unify(r1.inner, r2.inner);
+                    return;
+                }
+                if (r1.type === 'Function' && r2.type === 'Function') {
+                    if (r1.params.length !== r2.params.length) throw new Error("Tip Hatası: Fonksiyon argüman sayısı uyuşmuyor");
+                    for (let i = 0; i < r1.params.length; i++) {
+                        this.unify(r1.params[i], r2.params[i]);
+                    }
+                    this.unify(r1.ret, r2.ret);
+                    return;
+                }
+                throw new Error(`Tip Hatası: ${r1.type} ile ${r2.type} tipleri birleştirilemiyor`);
+            }
+
+            freeVars(t) {
+                const resolved = this.resolve(t);
+                const vars = new Set();
+                this.collectFreeVars(resolved, vars);
+                return vars;
+            }
+
+            collectFreeVars(t, vars) {
+                if (t.type === 'Var') {
+                    if (this.substitutions.has(t.id)) {
+                        this.collectFreeVars(this.substitutions.get(t.id), vars);
+                    } else {
+                        vars.add(t.id);
+                    }
+                } else if (t.type === 'Array' || t.type === 'Map' || t.type === 'Task') {
+                    this.collectFreeVars(t.inner, vars);
+                } else if (t.type === 'Function') {
+                    for (let p of t.params) this.collectFreeVars(p, vars);
+                    this.collectFreeVars(t.ret, vars);
+                }
+            }
+
+            freeVarsEnv(env) {
+                const vars = new Set();
+                let curr = env;
+                while (curr) {
+                    for (let scheme of curr.bindings.values()) {
+                        const schemeFree = this.freeVars(scheme.ty);
+                        const quantified = new Set(scheme.vars);
+                        for (let v of schemeFree) {
+                            if (!quantified.has(v)) {
+                                vars.add(v);
+                            }
+                        }
+                    }
+                    curr = curr.parent;
+                }
+                return vars;
+            }
+
+            generalize(t, env) {
+                const tFree = this.freeVars(t);
+                const envFree = this.freeVarsEnv(env);
+                const diff = [];
+                for (let v of tFree) {
+                    if (!envFree.has(v)) {
+                        diff.push(v);
+                    }
+                }
+                return { vars: diff, ty: t };
+            }
+
+            instantiate(scheme) {
+                const mapping = new Map();
+                for (let v of scheme.vars) {
+                    mapping.set(v, { type: 'Var', id: this.newVar() });
+                }
+
+                const subst = (ty) => {
+                    if (ty.type === 'Var') {
+                        if (mapping.has(ty.id)) return mapping.get(ty.id);
+                        return ty;
+                    }
+                    if (ty.type === 'Array') return { type: 'Array', inner: subst(ty.inner) };
+                    if (ty.type === 'Map') return { type: 'Map', inner: subst(ty.inner) };
+                    if (ty.type === 'Task') return { type: 'Task', inner: subst(ty.inner) };
+                    if (ty.type === 'Function') {
+                        return {
+                            type: 'Function',
+                            params: ty.params.map(subst),
+                            ret: subst(ty.ret)
+                        };
+                    }
+                    return ty;
+                };
+                return subst(scheme.ty);
+            }
+
+            inferExpr(expr, env, currentRetTy) {
+                switch (expr.type) {
+                    case 'Literal':
+                        if (typeof expr.val === 'number') return Type.Number;
+                        if (typeof expr.val === 'string') return Type.String;
+                        if (typeof expr.val === 'boolean') return Type.Boolean;
+                        if (expr.val === null) return Type.Bos;
+                        throw new Error("Bilinmeyen literal tipi");
+                    case 'Identifier': {
+                        const scheme = env.get(expr.val);
+                        if (!scheme) throw new Error(`Tip Hatası: Tanımlanamayan değişken '${expr.val}'`);
+                        return this.instantiate(scheme);
+                    }
+                    case 'Binary': {
+                        const t1 = this.inferExpr(expr.left, env, currentRetTy);
+                        const t2 = this.inferExpr(expr.right, env, currentRetTy);
+                        switch (expr.op) {
+                            case 'Plus':
+                                this.unify(t1, t2);
+                                const resolved = this.resolve(t1);
+                                if (resolved.type === 'Number') return Type.Number;
+                                if (resolved.type === 'String') return Type.String;
+                                if (resolved.type === 'Var') {
+                                    this.substitutions.set(resolved.id, Type.Number);
+                                    return Type.Number;
+                                }
+                                throw new Error("Tip Hatası: Toplama işlemi sadece sayılar veya metinler arasında yapılabilir");
+                            case 'Minus':
+                            case 'Mul':
+                            case 'Div':
+                            case 'Mod':
+                                this.unify(t1, Type.Number);
+                                this.unify(t2, Type.Number);
+                                return Type.Number;
+                            case 'Eq':
+                            case 'Ne':
+                                this.unify(t1, t2);
+                                return Type.Boolean;
+                            case 'Lt':
+                            case 'Gt':
+                            case 'Le':
+                            case 'Ge':
+                                this.unify(t1, Type.Number);
+                                this.unify(t2, Type.Number);
+                                return Type.Boolean;
+                            case 'And':
+                            case 'Or':
+                                this.unify(t1, Type.Boolean);
+                                this.unify(t2, Type.Boolean);
+                                return Type.Boolean;
+                            default:
+                                throw new Error(`Bilinmeyen operatör '${expr.op}'`);
+                        }
+                    }
+                    case 'Call': {
+                        if (expr.name === 'arkaplanda_çalıştır' || expr.name === 'arkaplanda_calistir') {
+                            if (expr.args.length === 0) throw new Error("Tip Hatası: arkaplanda_çalıştır en az bir argüman almalıdır");
+                            const fnTy = this.inferExpr(expr.args[0], env, currentRetTy);
+                            const paramTys = expr.args.slice(1).map(arg => this.inferExpr(arg, env, currentRetTy));
+                            const retVar = this.newVar();
+                            const expectedFnTy = {
+                                type: 'Function',
+                                params: paramTys,
+                                ret: { type: 'Var', id: retVar }
+                            };
+                            this.unify(fnTy, expectedFnTy);
+                            return { type: 'Task', inner: this.resolve({ type: 'Var', id: retVar }) };
+                        }
+
+                        const fnScheme = env.get(expr.name);
+                        if (!fnScheme) throw new Error(`Tip Hatası: Tanımlanamayan işlev '${expr.name}'`);
+                        const fnTy = this.instantiate(fnScheme);
+                        const argTys = expr.args.map(arg => this.inferExpr(arg, env, currentRetTy));
+                        const retVar = this.newVar();
+                        const expectedFnTy = {
+                            type: 'Function',
+                            params: argTys,
+                            ret: { type: 'Var', id: retVar }
+                        };
+                        this.unify(fnTy, expectedFnTy);
+                        return this.resolve({ type: 'Var', id: retVar });
+                    }
+                    case 'Array':
+                        for (let el of expr.elements) {
+                            this.inferExpr(el, env, currentRetTy);
+                        }
+                        return { type: 'Array', inner: { type: 'Var', id: this.newVar() } };
+                    case 'Map':
+                        for (let pair of expr.pairs) {
+                            const keyTy = this.inferExpr(pair.key, env, currentRetTy);
+                            this.unify(keyTy, Type.String);
+                            this.inferExpr(pair.val, env, currentRetTy);
+                        }
+                        return { type: 'Map', inner: { type: 'Var', id: this.newVar() } };
+                    case 'Index': {
+                        const arr = this.inferExpr(expr.array, env, currentRetTy);
+                        const idx = this.inferExpr(expr.index, env, currentRetTy);
+                        const resolvedArr = this.resolve(arr);
+                        if (resolvedArr.type === 'Array') {
+                            this.unify(idx, Type.Number);
+                            return { type: 'Var', id: this.newVar() };
+                        }
+                        if (resolvedArr.type === 'Map') {
+                            this.unify(idx, Type.String);
+                            return { type: 'Var', id: this.newVar() };
+                        }
+                        if (resolvedArr.type === 'Var') {
+                            const resVar = this.newVar();
+                            const arrayTy = { type: 'Array', inner: { type: 'Var', id: resVar } };
+                            this.substitutions.set(resolvedArr.id, arrayTy);
+                            this.unify(idx, Type.Number);
+                            return { type: 'Var', id: resVar };
+                        }
+                        throw new Error("Tip Hatası: Sadece diziler ve haritalar indekslenebilir");
+                    }
+                    case 'HataIse': {
+                        const baseTy = this.inferExpr(expr.base, env, currentRetTy);
+                        const childEnv = new JSTypeEnv(env);
+                        childEnv.set("hata_mesajı", { vars: [], ty: Type.String });
+                        childEnv.set("hata_mesaji", { vars: [], ty: Type.String });
+
+                        let bodyTy = Type.Bos;
+                        let currentEnv = childEnv;
+                        for (let stmt of expr.body) {
+                            if (stmt.type === 'ExprStmt') {
+                                bodyTy = this.inferExpr(stmt.expr, currentEnv, currentRetTy);
+                            } else {
+                                this.inferStmt(stmt, currentEnv, currentRetTy);
+                                bodyTy = Type.Bos;
+                            }
+                        }
+                        if (!this.typeEq(bodyTy, Type.Bos)) {
+                            this.unify(baseTy, bodyTy);
+                        }
+                        return this.resolve(baseTy);
+                    }
+                    default:
+                        throw new Error(`Bilinmeyen ifade tipi: '${expr.type}'`);
+                }
+            }
+
+            inferStmt(stmt, env, currentRetTy) {
+                switch (stmt.type) {
+                    case 'VarDecl': {
+                        const valTy = this.inferExpr(stmt.val, env, currentRetTy);
+                        const scheme = env.get(stmt.name);
+                        if (scheme) {
+                            const instantiated = this.instantiate(scheme);
+                            this.unify(instantiated, valTy);
+                        } else {
+                            env.set(stmt.name, { vars: [], ty: valTy });
+                        }
+                        break;
+                    }
+                    case 'IndexAssignment': {
+                        const arr = this.inferExpr(stmt.array, env, currentRetTy);
+                        const idx = this.inferExpr(stmt.index, env, currentRetTy);
+                        const val = this.inferExpr(stmt.val, env, currentRetTy);
+                        const resolvedArr = this.resolve(arr);
+                        if (resolvedArr.type === 'Array') {
+                            this.unify(idx, Type.Number);
+                        } else if (resolvedArr.type === 'Map') {
+                            this.unify(idx, Type.String);
+                        } else if (resolvedArr.type === 'Var') {
+                            const arrayTy = { type: 'Array', inner: { type: 'Var', id: this.newVar() } };
+                            this.substitutions.set(resolvedArr.id, arrayTy);
+                            this.unify(idx, Type.Number);
+                        } else {
+                            throw new Error("Tip Hatası: Sadece diziler ve haritalar güncellenebilir");
+                        }
+                        break;
+                    }
+                    case 'If': {
+                        const condTy = this.inferExpr(stmt.cond, env, currentRetTy);
+                        this.unify(condTy, Type.Boolean);
+                        const thenEnv = new JSTypeEnv(env);
+                        for (let s of stmt.thenBlock) this.inferStmt(s, thenEnv, currentRetTy);
+                        if (stmt.elseBlock) {
+                            const elseEnv = new JSTypeEnv(env);
+                            for (let s of stmt.elseBlock) this.inferStmt(s, elseEnv, currentRetTy);
+                        }
+                        break;
+                    }
+                    case 'While': {
+                        const condTy = this.inferExpr(stmt.cond, env, currentRetTy);
+                        this.unify(condTy, Type.Boolean);
+                        const bodyEnv = new JSTypeEnv(env);
+                        for (let s of stmt.body) this.inferStmt(s, bodyEnv, currentRetTy);
+                        break;
+                    }
+                    case 'For': {
+                        const start = this.inferExpr(stmt.start, env, currentRetTy);
+                        this.unify(start, Type.Number);
+                        const end = this.inferExpr(stmt.end, env, currentRetTy);
+                        this.unify(end, Type.Number);
+                        const bodyEnv = new JSTypeEnv(env);
+                        bodyEnv.set(stmt.var, { vars: [], ty: Type.Number });
+                        for (let s of stmt.body) this.inferStmt(s, bodyEnv, currentRetTy);
+                        break;
+                    }
+                    case 'FnDecl': {
+                        const retVar = this.newVar();
+                        const retTy = { type: 'Var', id: retVar };
+                        const paramTys = [];
+                        const bodyEnv = new JSTypeEnv(env);
+                        for (let p of stmt.params) {
+                            const pVar = this.newVar();
+                            const pTy = { type: 'Var', id: pVar };
+                            paramTys.push(pTy);
+                            bodyEnv.set(p, { vars: [], ty: pTy });
+                        }
+                        const fnTy = { type: 'Function', params: paramTys, ret: retTy };
+                        bodyEnv.set(stmt.name, { vars: [], ty: fnTy });
+
+                        for (let s of stmt.body) {
+                            this.inferStmt(s, bodyEnv, retTy);
+                        }
+
+                        const resolvedFn = this.resolve(fnTy);
+                        const generalized = this.generalize(resolvedFn, env);
+                        env.set(stmt.name, generalized);
+                        break;
+                    }
+                    case 'Return': {
+                        if (currentRetTy) {
+                            const actualTy = stmt.expr ? this.inferExpr(stmt.expr, env, currentRetTy) : Type.Bos;
+                            this.unify(currentRetTy, actualTy);
+                        } else {
+                            if (stmt.expr) {
+                                const actualTy = this.inferExpr(stmt.expr, env, currentRetTy);
+                                this.unify(Type.Bos, actualTy);
+                            }
+                        }
+                        break;
+                    }
+                    case 'ExprStmt':
+                        this.inferExpr(stmt.expr, env, currentRetTy);
+                        break;
+                    case 'Tamamlaninca': {
+                        const task = this.inferExpr(stmt.gorev, env, currentRetTy);
+                        const taskResVar = this.newVar();
+                        const expectedTaskTy = { type: 'Task', inner: { type: 'Var', id: taskResVar } };
+                        this.unify(task, expectedTaskTy);
+
+                        const bodyEnv = new JSTypeEnv(env);
+                        const resolvedRes = this.resolve({ type: 'Var', id: taskResVar });
+                        bodyEnv.set("sonuç", { vars: [], ty: resolvedRes });
+                        bodyEnv.set("sonuc", { vars: [], ty: resolvedRes });
+                        for (let s of stmt.body) this.inferStmt(s, bodyEnv, currentRetTy);
+                        break;
+                    }
+                }
+            }
+        }
+
+        function createDefaultTypeEnv(checker) {
+            const env = new JSTypeEnv();
+            
+            // yazdır
+            const aYazdir = checker.newVar();
+            const yazdirTy = {
+                type: 'Function',
+                params: [{ type: 'Var', id: aYazdir }],
+                ret: Type.Bos
+            };
+            env.set('yazdır', { vars: [aYazdir], ty: yazdirTy });
+            env.set('yazdir', { vars: [aYazdir], ty: yazdirTy });
+
+            // boyut
+            const aBoyut = checker.newVar();
+            const boyutTy = {
+                type: 'Function',
+                params: [{ type: 'Var', id: aBoyut }],
+                ret: Type.Number
+            };
+            env.set('boyut', { vars: [aBoyut], ty: boyutTy });
+
+            // ekle
+            const aEkle = checker.newVar();
+            const ekleTy = {
+                type: 'Function',
+                params: [{ type: 'Array', inner: { type: 'Var', id: aEkle } }, { type: 'Var', id: aEkle }],
+                ret: Type.Bos
+            };
+            env.set('ekle', { vars: [aEkle], ty: ekleTy });
+
+            // kök
+            const kokTy = {
+                type: 'Function',
+                params: [Type.Number],
+                ret: Type.Number
+            };
+            env.set('kök', { vars: [], ty: kokTy });
+            env.set('karekok', { vars: [], ty: kokTy });
+
+            // üs
+            const usTy = {
+                type: 'Function',
+                params: [Type.Number, Type.Number],
+                ret: Type.Number
+            };
+            env.set('üs', { vars: [], ty: usTy });
+            env.set('ust', { vars: [], ty: usTy });
+
+            // mutlak
+            const mutlakTy = {
+                type: 'Function',
+                params: [Type.Number],
+                ret: Type.Number
+            };
+            env.set('mutlak', { vars: [], ty: mutlakTy });
+
+            // şimdi
+            const simdiTy = {
+                type: 'Function',
+                params: [],
+                ret: Type.Number
+            };
+            env.set('şimdi', { vars: [], ty: simdiTy });
+            env.set('simdi', { vars: [], ty: simdiTy });
+
+            // uyku
+            const uykuTy = {
+                type: 'Function',
+                params: [Type.Number],
+                ret: Type.Bos
+            };
+            env.set('uyku', { vars: [], ty: uykuTy });
+
+            // dosya_oku
+            const dosyaOkuTy = {
+                type: 'Function',
+                params: [Type.String],
+                ret: Type.String
+            };
+            env.set('dosya_oku', { vars: [], ty: dosyaOkuTy });
+
+            // dosya_yaz
+            const dosyaYazTy = {
+                type: 'Function',
+                params: [Type.String, Type.String],
+                ret: Type.Boolean
+            };
+            env.set('dosya_yaz', { vars: [], ty: dosyaYazTy });
+
+            // dosya_sil
+            const dosyaSilTy = {
+                type: 'Function',
+                params: [Type.String],
+                ret: Type.Boolean
+            };
+            env.set('dosya_sil', { vars: [], ty: dosyaSilTy });
+
+            // hata_fırlat
+            const aHata = checker.newVar();
+            const hataTy = {
+                type: 'Function',
+                params: [{ type: 'Var', id: aHata }],
+                ret: { type: 'Var', id: checker.newVar() }
+            };
+            env.set('hata_fırlat', { vars: [aHata], ty: hataTy });
+            env.set('hata_firlat', { vars: [aHata], ty: hataTy });
+
+            return env;
+        }
+
         // 4.5 Interpreter
         class Env {
             constructor(parent = null) {
@@ -1398,6 +1973,13 @@ yazdır("Güncellenmiş Dizi:", dizi);`
 
                 // Show AST visually
                 astOutput.innerHTML = JSON.stringify(ast, null, 4);
+
+                // 2.5 Static Type Checker
+                const typeChecker = new JSTypeChecker();
+                const typeEnv = createDefaultTypeEnv(typeChecker);
+                for (let stmt of ast) {
+                    typeChecker.inferStmt(stmt, typeEnv, null);
+                }
 
                 // 3. Interpret / Run
                 const interpreter = new Interpreter((txt) => {

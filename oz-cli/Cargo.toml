@@ -12,6 +12,10 @@ oz-interpreter = { path = "../oz-interpreter" }
 oz-vm = { path = "../oz-vm" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
+ariadne.workspace = true
+chumsky.workspace = true
+
+
 
 
 

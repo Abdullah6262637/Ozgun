@@ -1,26 +1,66 @@
 use crate::instruction::{Instruction, Val};
-use oz_parser::ast::{Expr, Statement, BinaryOp, Literal, StepDir};
+use oz_parser::ast::{Expr, Statement, BinaryOp, UnaryOp, Literal, StepDir, Spanned};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+enum VarRef {
+    Local(u16),
+    Global(String),
+}
 
 pub struct Compiler {
     instructions: Vec<Instruction>,
+    scopes: Vec<HashMap<String, u16>>,
+    next_local: u16,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
             instructions: Vec::new(),
+            scopes: Vec::new(),
+            next_local: 0,
         }
     }
 
-    pub fn compile_program(mut self, stmts: &[Statement]) -> Result<Vec<Instruction>, String> {
+    fn get_variable(&self, name: &str) -> VarRef {
+        for scope in self.scopes.iter().rev() {
+            if let Some(&slot) = scope.get(name) {
+                return VarRef::Local(slot);
+            }
+        }
+        VarRef::Global(name.to_string())
+    }
+
+    fn declare_variable(&mut self, name: &str) -> VarRef {
+        for scope in self.scopes.iter().rev() {
+            if let Some(&slot) = scope.get(name) {
+                return VarRef::Local(slot);
+            }
+        }
+        if !self.scopes.is_empty() {
+            let slot = self.next_local;
+            self.next_local += 1;
+            self.scopes.last_mut().unwrap().insert(name.to_string(), slot);
+            VarRef::Local(slot)
+        } else {
+            VarRef::Global(name.to_string())
+        }
+    }
+
+
+
+
+    pub fn compile_program(mut self, stmts: &[Spanned<Statement>]) -> Result<Vec<Instruction>, String> {
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
         Ok(self.instructions)
     }
 
-    fn compile_expr(&mut self, expr: &Expr) -> Result<(), String> {
-        match expr {
+    fn compile_expr(&mut self, expr: &Spanned<Expr>) -> Result<(), String> {
+        match &expr.node {
+
             Expr::Literal(lit) => match lit {
                 Literal::Number(n) => self.instructions.push(Instruction::Constant(Val::Number(*n))),
                 Literal::String(s) => self.instructions.push(Instruction::Constant(Val::String(s.clone()))),
@@ -28,33 +68,101 @@ impl Compiler {
                 Literal::Bos => self.instructions.push(Instruction::Constant(Val::Bos)),
             },
             Expr::Identifier(name) => {
-                self.instructions.push(Instruction::Load(name.clone()));
+                match self.get_variable(name) {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                }
+            }
+            Expr::Unary(op, operand) => {
+                self.compile_expr(operand)?;
+                match op {
+                    UnaryOp::Neg => self.instructions.push(Instruction::Neg),
+                    UnaryOp::Not => self.instructions.push(Instruction::Not),
+                }
             }
             Expr::Binary(lhs, op, rhs) => {
-                self.compile_expr(lhs)?;
-                self.compile_expr(rhs)?;
-                let inst = match op {
-                    BinaryOp::Add => Instruction::Add,
-                    BinaryOp::Sub => Instruction::Sub,
-                    BinaryOp::Mul => Instruction::Mul,
-                    BinaryOp::Div => Instruction::Div,
-                    BinaryOp::Mod => Instruction::Mod,
-                    BinaryOp::Eq => Instruction::Eq,
-                    BinaryOp::Ne => Instruction::Ne,
-                    BinaryOp::Lt => Instruction::Lt,
-                    BinaryOp::Gt => Instruction::Gt,
-                    BinaryOp::Le => Instruction::Le,
-                    BinaryOp::Ge => Instruction::Ge,
-                    BinaryOp::And => Instruction::And,
-                    BinaryOp::Or => Instruction::Or,
-                };
-                self.instructions.push(inst);
+                match op {
+                    BinaryOp::And => {
+                        self.compile_expr(lhs)?;
+                        let jump_idx = self.instructions.len();
+                        self.instructions.push(Instruction::JumpIfFalseKeep(0));
+                        self.instructions.push(Instruction::Pop);
+                        self.compile_expr(rhs)?;
+                        let end_idx = self.instructions.len();
+                        self.instructions[jump_idx] = Instruction::JumpIfFalseKeep(end_idx);
+                    }
+                    BinaryOp::Or => {
+                        self.compile_expr(lhs)?;
+                        let jump_idx = self.instructions.len();
+                        self.instructions.push(Instruction::JumpIfTrueKeep(0));
+                        self.instructions.push(Instruction::Pop);
+                        self.compile_expr(rhs)?;
+                        let end_idx = self.instructions.len();
+                        self.instructions[jump_idx] = Instruction::JumpIfTrueKeep(end_idx);
+                    }
+                    _ => {
+                        self.compile_expr(lhs)?;
+                        self.compile_expr(rhs)?;
+                        let inst = match op {
+                            BinaryOp::Add => Instruction::Add,
+                            BinaryOp::Sub => Instruction::Sub,
+                            BinaryOp::Mul => Instruction::Mul,
+                            BinaryOp::Div => Instruction::Div,
+                            BinaryOp::Mod => Instruction::Mod,
+                            BinaryOp::Eq => Instruction::Eq,
+                            BinaryOp::Ne => Instruction::Ne,
+                            BinaryOp::Lt => Instruction::Lt,
+                            BinaryOp::Gt => Instruction::Gt,
+                            BinaryOp::Le => Instruction::Le,
+                            BinaryOp::Ge => Instruction::Ge,
+                            BinaryOp::And | BinaryOp::Or => unreachable!(),
+                        };
+                        self.instructions.push(inst);
+                    }
+                }
             }
+
             Expr::Call(name, args) => {
+                if name == "dahil_et" {
+                    if args.len() != 1 {
+                        return Err("HATA: dahil_et tek bir dosya yolu parametresi almalıdır".to_string());
+                    }
+                    if let Expr::Literal(Literal::String(path)) = &args[0].node {
+
+                        let content = std::fs::read_to_string(path)
+                            .map_err(|e| format!("Modül yüklenemedi ({}): {}", path, e))?;
+                        
+                        use oz_lexer::Token;
+                        use logos::Logos;
+                        let lexer = Token::lexer(&content);
+                        let mut tokens = Vec::new();
+                        for (token_res, span) in lexer.spanned() {
+                            match token_res {
+                                Ok(token) => tokens.push((token, span)),
+                                Err(_) => return Err(format!("Sözcüksel analiz hatası at {:?}", span)),
+                            }
+                        }
+                        
+                        let ast = oz_parser::parse_tokens(tokens, content.len())
+                            .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
+                        
+                        for stmt in &ast {
+                            self.compile_stmt(stmt)?;
+                        }
+                        self.instructions.push(Instruction::Constant(Val::Bos));
+                        return Ok(());
+                    } else {
+                        return Err("HATA: Derleme zamanı dahil_et parametresi doğrudan metin (literal string) olmalıdır".to_string());
+                    }
+                }
+
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
-                self.instructions.push(Instruction::Load(name.clone()));
+                match self.get_variable(name) {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                }
                 self.instructions.push(Instruction::Call(args.len()));
             }
             Expr::Array(elements) => {
@@ -79,7 +187,12 @@ impl Compiler {
                 self.compile_expr(base)?;
                 let jump_error_idx = self.instructions.len();
                 self.instructions.push(Instruction::JumpIfError(0));
-                self.instructions.push(Instruction::Store("hata_mesajı".to_string()));
+                
+                let err_var = self.declare_variable("hata_mesajı");
+                match &err_var {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
                 for stmt in body {
                     self.compile_stmt(stmt)?;
                 }
@@ -91,16 +204,22 @@ impl Compiler {
                 let end_idx = self.instructions.len();
                 self.instructions[jump_end_idx] = Instruction::Jump(end_idx);
             }
+
         }
         Ok(())
     }
 
-    fn compile_stmt(&mut self, stmt: &Statement) -> Result<(), String> {
-        match stmt {
+    fn compile_stmt(&mut self, stmt: &Spanned<Statement>) -> Result<(), String> {
+        match &stmt.node {
+
             Statement::VarDecl(name, value) | Statement::Assignment(name, value) => {
                 self.compile_expr(value)?;
-                self.instructions.push(Instruction::Store(name.clone()));
+                match self.declare_variable(name) {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot)),
+                }
             }
+
             Statement::IndexAssignment(array, index, value) => {
                 self.compile_expr(array)?;
                 self.compile_expr(index)?;
@@ -152,19 +271,28 @@ impl Compiler {
                 let end_idx = self.instructions.len();
                 self.instructions[jump_false_idx] = Instruction::JumpIfFalse(end_idx);
             }
+
             Statement::For {
                 var,
+
                 start,
                 end,
                 step_dir,
                 body,
             } => {
                 self.compile_expr(start)?;
-                self.instructions.push(Instruction::Store(var.clone()));
+                let var_ref = self.declare_variable(var);
+                match &var_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
 
                 let loop_start = self.instructions.len();
 
-                self.instructions.push(Instruction::Load(var.clone()));
+                match &var_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot.clone())),
+                }
                 self.compile_expr(end)?;
                 match step_dir {
                     StepDir::Artarak => self.instructions.push(Instruction::Le),
@@ -178,13 +306,19 @@ impl Compiler {
                     self.compile_stmt(s)?;
                 }
 
-                self.instructions.push(Instruction::Load(var.clone()));
+                match &var_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot.clone())),
+                }
                 self.instructions.push(Instruction::Constant(Val::Number(1.0)));
                 match step_dir {
                     StepDir::Artarak => self.instructions.push(Instruction::Add),
                     StepDir::Azalarak => self.instructions.push(Instruction::Sub),
                 }
-                self.instructions.push(Instruction::Store(var.clone()));
+                match &var_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
 
                 self.instructions.push(Instruction::Jump(loop_start));
 
@@ -196,8 +330,18 @@ impl Compiler {
                 self.instructions.push(Instruction::Jump(0));
 
                 let fn_start = self.instructions.len();
+                
+                // local scope
+                self.scopes.push(HashMap::new());
+                let old_next_local = self.next_local;
+                self.next_local = 0;
+
                 for param in params.iter().rev() {
-                    self.instructions.push(Instruction::Store(param.clone()));
+                    let param_ref = self.declare_variable(param);
+                    match &param_ref {
+                        VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                        VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                    }
                 }
 
                 for s in body {
@@ -205,6 +349,9 @@ impl Compiler {
                 }
                 self.instructions.push(Instruction::Constant(Val::Bos));
                 self.instructions.push(Instruction::Return);
+
+                self.scopes.pop();
+                self.next_local = old_next_local;
 
                 let fn_end = self.instructions.len();
                 self.instructions[jump_over_idx] = Instruction::Jump(fn_end);
@@ -214,7 +361,12 @@ impl Compiler {
                     param_count: params.len(),
                     entry_ip: fn_start,
                 }));
-                self.instructions.push(Instruction::Store(name.clone()));
+                
+                let fn_var = self.declare_variable(name);
+                match &fn_var {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
             }
             Statement::Return(opt_expr) => {
                 if let Some(expr) = opt_expr {
@@ -227,9 +379,24 @@ impl Compiler {
             Statement::Tamamlaninca(gorev_expr, body) => {
                 self.compile_expr(gorev_expr)?;
                 self.instructions.push(Instruction::AwaitTask);
-                self.instructions.push(Instruction::Store("sonuç".to_string()));
-                self.instructions.push(Instruction::Load("sonuç".to_string()));
-                self.instructions.push(Instruction::Store("sonuc".to_string()));
+                
+                let sonuc_ref = self.declare_variable("sonuç");
+                match &sonuc_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
+                
+                match &sonuc_ref {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot.clone())),
+                }
+                
+                let sonuc_ref_ascii = self.declare_variable("sonuc");
+                match &sonuc_ref_ascii {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                }
+                
                 for s in body {
                     self.compile_stmt(s)?;
                 }
@@ -238,3 +405,4 @@ impl Compiler {
         Ok(())
     }
 }
+

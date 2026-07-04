@@ -31,9 +31,13 @@ pub struct TaskState {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     Constant(Val),
-    Load(String),
-    Store(String),
+    LoadLocal(u16),
+    StoreLocal(u16),
+    LoadGlobal(String),
+    StoreGlobal(String),
+
     Pop,
+
     Add,
     Sub,
     Mul,
@@ -57,4 +61,9 @@ pub enum Instruction {
     Index,
     IndexStore,
     AwaitTask,
+    Neg,
+    Not,
+    JumpIfFalseKeep(usize),
+    JumpIfTrueKeep(usize),
 }
+

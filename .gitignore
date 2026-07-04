@@ -4,3 +4,10 @@
 .vscode/
 .DS_Store
 *.oz.bk
+*.exe
+*.o
+*.c
+ornek_proje/kitaplik/
+ornek_proje/program.c
+ornek_proje/program.exe
+

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 struct Frame {
     return_address: usize,
-    locals: HashMap<String, Val>,
+    slots: Vec<Val>,
 }
 
 pub struct VM {
@@ -14,6 +14,7 @@ pub struct VM {
     stack: Vec<Val>,
     globals: HashMap<String, Val>,
     frames: Vec<Frame>,
+    pub stdout: Option<Rc<RefCell<Vec<u8>>>>,
 }
 
 impl VM {
@@ -43,8 +44,10 @@ impl VM {
             stack: Vec::new(),
             globals,
             frames: Vec::new(),
+            stdout: None,
         }
     }
+
 
     pub fn get_global(&self, name: &str) -> Option<Val> {
         self.globals.get(name).cloned()
@@ -59,35 +62,44 @@ impl VM {
                 Instruction::Constant(val) => {
                     self.stack.push(val.clone());
                 }
-                Instruction::Load(name) => {
-                    // Try locals in current frame first, then globals
-                    let mut found = false;
+                Instruction::LoadLocal(slot) => {
                     if let Some(frame) = self.frames.last() {
-                        if let Some(val) = frame.locals.get(name) {
-                            self.stack.push(val.clone());
-                            found = true;
-                        }
-                    }
-                    if !found {
-                        if let Some(val) = self.globals.get(name) {
+                        if let Some(val) = frame.slots.get(*slot as usize) {
                             self.stack.push(val.clone());
                         } else {
-                            return Err(format!("HATA: Tanımlanamayan değişken '{}'", name));
+                            self.stack.push(Val::Bos);
                         }
+                    } else {
+                        return Err("HATA: Yerel değişken yerel yığın dışında kullanıldı".to_string());
                     }
                 }
-                Instruction::Store(name) => {
-                    let val = self.stack.pop().ok_or("HATA: Yığın boş (Store)")?;
-                    // If we have frames, store in the current frame's locals
+                Instruction::StoreLocal(slot) => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (StoreLocal)")?;
                     if let Some(frame) = self.frames.last_mut() {
-                        frame.locals.insert(name.clone(), val);
+                        let idx = *slot as usize;
+                        if idx >= frame.slots.len() {
+                            frame.slots.resize(idx + 1, Val::Bos);
+                        }
+                        frame.slots[idx] = val;
                     } else {
-                        self.globals.insert(name.clone(), val);
+                        return Err("HATA: Yerel değişken yerel yığın dışında kullanıldı".to_string());
                     }
+                }
+                Instruction::LoadGlobal(name) => {
+                    if let Some(val) = self.globals.get(name) {
+                        self.stack.push(val.clone());
+                    } else {
+                        return Err(format!("HATA: Tanımlanamayan değişken '{}'", name));
+                    }
+                }
+                Instruction::StoreGlobal(name) => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (StoreGlobal)")?;
+                    self.globals.insert(name.clone(), val);
                 }
                 Instruction::Pop => {
                     self.stack.pop().ok_or("HATA: Yığın boş (Pop)")?;
                 }
+
                 Instruction::Add => {
                     let b = self.stack.pop().ok_or("HATA: Yığın boş (Add rhs)")?;
                     let a = self.stack.pop().ok_or("HATA: Yığın boş (Add lhs)")?;
@@ -206,6 +218,43 @@ impl VM {
                         _ => return Err("HATA: Mantıksal koşul bekleniyordu".to_string()),
                     }
                 }
+                Instruction::JumpIfFalseKeep(dest) => {
+                    let val = self.stack.last().ok_or("HATA: Yığın boş (JumpIfFalseKeep)")?;
+                    match val {
+                        Val::Boolean(b) => {
+                            if !*b {
+                                self.ip = *dest;
+                            }
+                        }
+                        _ => return Err("HATA: Mantıksal koşul bekleniyordu".to_string()),
+                    }
+                }
+                Instruction::JumpIfTrueKeep(dest) => {
+                    let val = self.stack.last().ok_or("HATA: Yığın boş (JumpIfTrueKeep)")?;
+                    match val {
+                        Val::Boolean(b) => {
+                            if *b {
+                                self.ip = *dest;
+                            }
+                        }
+                        _ => return Err("HATA: Mantıksal koşul bekleniyordu".to_string()),
+                    }
+                }
+                Instruction::Neg => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (Neg)")?;
+                    match val {
+                        Val::Number(n) => self.stack.push(Val::Number(-n)),
+                        _ => return Err("HATA: Negatif işlem sadece sayılarla yapılabilir".to_string()),
+                    }
+                }
+                Instruction::Not => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (Not)")?;
+                    match val {
+                        Val::Boolean(b) => self.stack.push(Val::Boolean(!b)),
+                        _ => return Err("HATA: Mantıksal değil işlemi sadece mantıksal değerlerle yapılabilir".to_string()),
+                    }
+                }
+
                 Instruction::Call(arg_count) => {
                     let func_val = self.stack.pop().ok_or("HATA: Yığın boş (Call)")?;
                     match func_val {
@@ -213,13 +262,11 @@ impl VM {
                             if param_count != *arg_count {
                                 return Err(format!("HATA: {} parametre bekleniyor, fakat {} verildi", param_count, arg_count));
                             }
-                            // Local variables for function frame
-                            let locals = HashMap::new();
-                            // Frame is pushed: return address is current ip
                             let frame = Frame {
                                 return_address: self.ip,
-                                locals,
+                                slots: Vec::new(),
                             };
+
                             self.frames.push(frame);
                             self.ip = entry_ip;
                         }
@@ -231,54 +278,20 @@ impl VM {
                                 }
                                 args.reverse();
 
+                                let mut output = String::new();
                                 for (i, arg) in args.iter().enumerate() {
                                     if i > 0 {
-                                        print!(" ");
+                                        output.push(' ');
                                     }
-                                    match arg {
-                                        Val::Number(n) => print!("{}", n),
-                                        Val::String(s) => print!("{}", s),
-                                        Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
-                                        Val::Bos => print!("boş"),
-                                        Val::Array(arr) => {
-                                            let items = arr.borrow();
-                                            print!("[");
-                                            for (idx, item) in items.iter().enumerate() {
-                                                if idx > 0 {
-                                                    print!(", ");
-                                                }
-                                                match item {
-                                                    Val::Number(n) => print!("{}", n),
-                                                    Val::String(s) => print!("{}", s),
-                                                    Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
-                                                    Val::Bos => print!("boş"),
-                                                    _ => print!("{:?}", item),
-                                                }
-                                            }
-                                            print!("]");
-                                        }
-                                        Val::Map(map) => {
-                                            let items = map.borrow();
-                                            print!("{{");
-                                            for (idx, (k, v)) in items.iter().enumerate() {
-                                                if idx > 0 {
-                                                    print!(", ");
-                                                }
-                                                print!("{}: ", k);
-                                                match v {
-                                                    Val::Number(n) => print!("{}", n),
-                                                    Val::String(s) => print!("\"{}\"", s),
-                                                    Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
-                                                    Val::Bos => print!("boş"),
-                                                    _ => print!("{:?}", v),
-                                                }
-                                            }
-                                            print!("}}");
-                                        }
-                                        _ => print!("{:?}", arg),
-                                    }
+                                    output.push_str(&format_val(arg));
                                 }
-                                println!();
+                                output.push('\n');
+
+                                if let Some(stdout_ref) = &self.stdout {
+                                    stdout_ref.borrow_mut().extend_from_slice(output.as_bytes());
+                                } else {
+                                    print!("{}", output);
+                                }
                                 self.stack.push(Val::Bos);
                             } else if name == "boyut" {
                                 if *arg_count != 1 {
@@ -548,7 +561,7 @@ impl VM {
                                         }
                                         sub_vm.frames.push(Frame {
                                             return_address: self.instructions.len(),
-                                            locals: HashMap::new(),
+                                            slots: Vec::new(),
                                         });
                                         sub_vm.ip = *entry_ip;
                                         sub_vm.run()?;
@@ -705,3 +718,38 @@ impl VM {
         Ok(())
     }
 }
+
+fn format_val(val: &Val) -> String {
+    match val {
+        Val::Number(n) => format!("{}", n),
+        Val::String(s) => s.clone(),
+        Val::Boolean(b) => (if *b { "doğru" } else { "yanlış" }).to_string(),
+        Val::Bos => "boş".to_string(),
+        Val::Array(arr) => {
+            let items = arr.borrow();
+            let mut s = "[".to_string();
+            for (idx, item) in items.iter().enumerate() {
+                if idx > 0 {
+                    s.push_str(", ");
+                }
+                s.push_str(&format_val(item));
+            }
+            s.push(']');
+            s
+        }
+        Val::Map(map) => {
+            let items = map.borrow();
+            let mut s = "{".to_string();
+            for (idx, (k, v)) in items.iter().enumerate() {
+                if idx > 0 {
+                    s.push_str(", ");
+                }
+                s.push_str(&format!("{}: {}", k, format_val(v)));
+            }
+            s.push('}');
+            s
+        }
+        _ => format!("{:?}", val),
+    }
+}
+
