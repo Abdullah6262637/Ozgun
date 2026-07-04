@@ -379,3 +379,20 @@ fn test_dahil_et_dongusel() {
         err_msg
     );
 }
+
+#[test]
+fn test_dahil_et_std() {
+    let src = r#"
+        dahil_et("std::matematik");
+        dahil_et("std::zaman");
+        dahil_et("std::dosya");
+        
+        kok_degeri = karekok(9);
+        ust_degeri = ust(2, 3);
+    "#;
+    let res = run_bytecode(src);
+    assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+    let (_, vm) = res.unwrap();
+    assert_eq!(vm.get_global("kok_degeri"), Some(Val::Number(3.0)));
+    assert_eq!(vm.get_global("ust_degeri"), Some(Val::Number(8.0)));
+}

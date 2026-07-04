@@ -110,10 +110,25 @@ impl TypeChecker {
                         return Err("Tip Hatası: dahil_et en az bir argüman almalıdır".to_string());
                     }
                     if let Expr::Literal(Literal::String(path_str)) = &args[0].node {
-                        let path = std::path::Path::new(path_str);
-                        let canonical_path = std::fs::canonicalize(path).map_err(|e| {
-                            format!("Modül yolu çözümlenemedi ({}): {}", path_str, e)
-                        })?;
+                        let embedded_content = match path_str.as_str() {
+                            "std::matematik" => Some("işlev karekok(x) { döndür kök(x); } işlev ust(taban, kuvvet) { döndür üs(taban, kuvvet); } işlev mutlak_deger(x) { döndür mutlak(x); }".to_string()),
+                            "std::dosya" => Some("işlev oku(yol) { döndür dosya_oku(yol); } işlev yaz(yol, icerik) { döndür dosya_yaz(yol, icerik); } işlev sil(yol) { döndür dosya_sil(yol); }".to_string()),
+                            "std::zaman" => Some("işlev simdi() { döndür şimdi(); } işlev bekle(ms) { döndür uyku(ms); }".to_string()),
+                            _ => None,
+                        };
+
+                        let (canonical_path, content) = if let Some(content_str) = embedded_content
+                        {
+                            (std::path::PathBuf::from(path_str.clone()), content_str)
+                        } else {
+                            let path = std::path::Path::new(path_str);
+                            let canonical_path = std::fs::canonicalize(path).map_err(|e| {
+                                format!("Modül yolu çözümlenemedi ({}): {}", path_str, e)
+                            })?;
+                            let read_content = std::fs::read_to_string(&canonical_path)
+                                .map_err(|e| format!("Modül yüklenemedi ({}): {}", path_str, e))?;
+                            (canonical_path, read_content)
+                        };
 
                         // 1. Döngüsel Bağımlılık Kontrolü
                         if self.loading_stack.contains(&canonical_path) {
@@ -130,9 +145,6 @@ impl TypeChecker {
 
                         // Yükleme stack'ine ekle
                         self.loading_stack.push(canonical_path.clone());
-
-                        let content = std::fs::read_to_string(&canonical_path)
-                            .map_err(|e| format!("Modül yüklenemedi ({}): {}", path_str, e))?;
 
                         use logos::Logos;
                         use oz_lexer::Token;
