@@ -39,7 +39,7 @@ fn suffix_parser(values: &'static [&'static str]) -> impl Parser<Token, String, 
     })
 }
 
-fn expr_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clone + 'static) -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let array_literal = just(Token::LBracket)
             .ignore_then(expr.clone().separated_by(just(Token::Comma)))
@@ -119,14 +119,30 @@ fn expr_parser() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         let op_logical = just(Token::And)
             .to(BinaryOp::And)
             .or(just(Token::Or).to(BinaryOp::Or));
-        comparison.then(op_logical.then(expr.clone()).repeated()).foldl(
+        let base_expr = comparison.then(op_logical.then(expr.clone()).repeated()).foldl(
             |lhs, (op, rhs)| Expr::Binary(Box::new(lhs), op, Box::new(rhs)),
-        )
+        );
+
+        let block = stmt
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace));
+
+        base_expr
+            .then(just(Token::HataIse).ignore_then(block).or_not())
+            .map(|(base, body_opt)| {
+                if let Some(body) = body_opt {
+                    Expr::HataIse(Box::new(base), body)
+                } else {
+                    base
+                }
+            })
     })
 }
 
 fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + Clone {
     recursive(|stmt| {
+        let expr = expr_parser(stmt.clone());
         let block = stmt
             .clone()
             .repeated()
@@ -135,19 +151,19 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
         // x = 5;
         let assign_or_decl = ident_parser()
             .then_ignore(just(Token::Assign))
-            .then(expr_parser())
+            .then(expr.clone())
             .then_ignore(just(Token::Semicolon))
             .map(|(name, value)| Statement::VarDecl(name, value));
 
         // koşul ise { ... } değilse { ... }
-        let if_stmt = expr_parser()
+        let if_stmt = expr.clone()
             .then_ignore(suffix_parser(&["ise", "se"]))
             .then(block.clone())
             .then(just(Token::Degilse).ignore_then(block.clone()).or_not())
             .map(|((cond, then_block), else_block)| Statement::If(cond, then_block, else_block));
 
         // koşul iken { ... }
-        let while_stmt = expr_parser()
+        let while_stmt = expr.clone()
             .then_ignore(suffix_parser(&["iken"]))
             .then(block.clone())
             .map(|(cond, body)| Statement::While(cond, body));
@@ -155,9 +171,9 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
         // i, 1'den 10'a dek artarak { ... }
         let for_stmt = ident_parser()
             .then_ignore(just(Token::Comma))
-            .then(expr_parser())
+            .then(expr.clone())
             .then_ignore(suffix_parser(&["dan", "den", "tan", "ten"]))
-            .then(expr_parser())
+            .then(expr.clone())
             .then_ignore(suffix_parser(&["a", "e", "ya", "ye"]))
             .then_ignore(suffix_parser(&["dek"]))
             .then(
@@ -190,12 +206,12 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
 
         // döndür x;
         let return_stmt = just(Token::Dondur)
-            .ignore_then(expr_parser().or_not())
+            .ignore_then(expr.clone().or_not())
             .then_ignore(just(Token::Semicolon))
             .map(Statement::Return);
 
         // Expression statements (e.g. function calls)
-        let expr_stmt = expr_parser()
+        let expr_stmt = expr.clone()
             .then_ignore(just(Token::Semicolon))
             .map(Statement::Expr);
 

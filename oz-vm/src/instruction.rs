@@ -15,6 +15,7 @@ pub enum Val {
     },
     Builtin(String),
     Array(Rc<RefCell<Vec<Val>>>),
+    Hata(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +39,7 @@ pub enum Instruction {
     Or,
     Jump(usize),
     JumpIfFalse(usize),
+    JumpIfError(usize),
     Call(usize),
     Return,
     Array(usize),

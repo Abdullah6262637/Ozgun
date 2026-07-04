@@ -22,6 +22,9 @@ pub enum Token {
     #[token("boş")]
     Bos,
 
+    #[token("hata_ise")]
+    HataIse,
+
     // Operators
     #[token("=")]
     Assign,

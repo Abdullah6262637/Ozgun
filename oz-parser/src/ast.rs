@@ -31,6 +31,7 @@ pub enum Expr {
     Call(String, Vec<Expr>),
     Array(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
+    HataIse(Box<Expr>, Vec<Statement>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

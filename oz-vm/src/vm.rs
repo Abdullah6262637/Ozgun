@@ -22,6 +22,7 @@ impl VM {
         globals.insert("yazdır".to_string(), Val::Builtin("yazdır".to_string()));
         globals.insert("boyut".to_string(), Val::Builtin("boyut".to_string()));
         globals.insert("ekle".to_string(), Val::Builtin("ekle".to_string()));
+        globals.insert("hata_fırlat".to_string(), Val::Builtin("hata_fırlat".to_string()));
 
         VM {
             instructions,
@@ -268,6 +269,17 @@ impl VM {
                                     arr.borrow_mut().push(val);
                                 }
                                 self.stack.push(Val::Bos);
+                            } else if name == "hata_fırlat" {
+                                if *arg_count >= 1 {
+                                    let arg = self.stack.pop().ok_or("HATA: Yığın boş (hata_fırlat)")?;
+                                    let msg = match arg {
+                                        Val::String(s) => s,
+                                        _ => format!("{:?}", arg),
+                                    };
+                                    self.stack.push(Val::Hata(msg));
+                                } else {
+                                    self.stack.push(Val::Hata("Bilinmeyen hata".to_string()));
+                                }
                             } else {
                                 return Err(format!("HATA: Bilinmeyen dahili işlev '{}'", name));
                             }
@@ -308,6 +320,18 @@ impl VM {
                             }
                         }
                         _ => return Err("HATA: Sadece diziler indekslenebilir".to_string()),
+                    }
+                }
+                Instruction::JumpIfError(dest) => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (JumpIfError)")?;
+                    match val {
+                        Val::Hata(msg) => {
+                            self.stack.push(Val::String(msg));
+                        }
+                        _ => {
+                            self.stack.push(val);
+                            self.ip = *dest;
+                        }
                     }
                 }
             }

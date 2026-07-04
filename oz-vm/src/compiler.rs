@@ -68,6 +68,22 @@ impl Compiler {
                 self.compile_expr(index_expr)?;
                 self.instructions.push(Instruction::Index);
             }
+            Expr::HataIse(base, body) => {
+                self.compile_expr(base)?;
+                let jump_error_idx = self.instructions.len();
+                self.instructions.push(Instruction::JumpIfError(0));
+                self.instructions.push(Instruction::Store("hata_mesajı".to_string()));
+                for stmt in body {
+                    self.compile_stmt(stmt)?;
+                }
+                self.instructions.push(Instruction::Constant(Val::Bos));
+                let jump_end_idx = self.instructions.len();
+                self.instructions.push(Instruction::Jump(0));
+                let else_start = self.instructions.len();
+                self.instructions[jump_error_idx] = Instruction::JumpIfError(else_start);
+                let end_idx = self.instructions.len();
+                self.instructions[jump_end_idx] = Instruction::Jump(end_idx);
+            }
         }
         Ok(())
     }

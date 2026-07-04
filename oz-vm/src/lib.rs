@@ -93,4 +93,30 @@ mod tests {
         assert_eq!(vm.get_global("ikinci"), Some(Val::Number(20.0)));
         assert_eq!(vm.get_global("eleman_sayisi"), Some(Val::Number(4.0)));
     }
+
+    #[test]
+    fn test_hata_ise() {
+        let src = r#"
+            işlev test_hata(hata_var) {
+                hata_var ise {
+                    res = hata_fırlat("baglanti koptu") hata_ise {
+                        döndür 500;
+                    };
+                    döndür res;
+                } değilse {
+                    res = 100 hata_ise {
+                        döndür 0;
+                    };
+                    döndür res;
+                }
+            }
+            sonuc_basarili = test_hata(yanlış);
+            sonuc_hatali = test_hata(doğru);
+        "#;
+        let res = run_bytecode(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, vm) = res.unwrap();
+        assert_eq!(vm.get_global("sonuc_basarili"), Some(Val::Number(100.0)));
+        assert_eq!(vm.get_global("sonuc_hatali"), Some(Val::Number(500.0)));
+    }
 }

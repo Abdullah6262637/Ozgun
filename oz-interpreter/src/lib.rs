@@ -15,6 +15,7 @@ pub enum Val {
     },
     Builtin(Rc<dyn Fn(Vec<Val>) -> Val>),
     Array(Rc<RefCell<Vec<Val>>>),
+    Hata(String),
 }
 
 impl std::fmt::Debug for Val {
@@ -37,6 +38,7 @@ impl std::fmt::Debug for Val {
                 }
                 write!(f, "]")
             }
+            Val::Hata(msg) => write!(f, "Hata({:?})", msg),
         }
     }
 }
@@ -49,6 +51,7 @@ impl PartialEq for Val {
             (Val::Boolean(a), Val::Boolean(b)) => a == b,
             (Val::Bos, Val::Bos) => true,
             (Val::Array(a), Val::Array(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Val::Hata(a), Val::Hata(b)) => a == b,
             _ => false,
         }
     }
@@ -152,6 +155,21 @@ pub fn create_global_env() -> Env {
                 }
             }
             Val::Bos
+        })),
+    );
+    // Built-in function "hata_fırlat" (raises an error value)
+    env.set(
+        "hata_fırlat".to_string(),
+        Val::Builtin(Rc::new(|args| {
+            let msg = if args.len() >= 1 {
+                match &args[0] {
+                    Val::String(s) => s.clone(),
+                    _ => format!("{:?}", args[0]),
+                }
+            } else {
+                "Bilinmeyen hata".to_string()
+            };
+            Val::Hata(msg)
         })),
     );
     env
@@ -284,6 +302,17 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Val, String> {
                     }
                 }
                 _ => Err("HATA: Sadece diziler indekslenebilir".to_string()),
+            }
+        }
+        Expr::HataIse(base, body) => {
+            let res = eval_expr(base, env)?;
+            if let Val::Hata(msg) = res {
+                let child_env = Env::extend(env);
+                child_env.set("hata_mesajı".to_string(), Val::String(msg));
+                let body_res = eval_program(body, &child_env)?;
+                Ok(body_res.unwrap_or(Val::Bos))
+            } else {
+                Ok(res)
             }
         }
     }
@@ -493,6 +522,32 @@ mod tests {
         assert_eq!(env.get("birinci"), Some(Val::Number(10.0)));
         assert_eq!(env.get("ikinci"), Some(Val::Number(20.0)));
         assert_eq!(env.get("eleman_sayisi"), Some(Val::Number(4.0)));
+    }
+
+    #[test]
+    fn test_hata_ise() {
+        let src = r#"
+            işlev test_hata(hata_var) {
+                hata_var ise {
+                    res = hata_fırlat("baglanti koptu") hata_ise {
+                        döndür 500;
+                    };
+                    döndür res;
+                } değilse {
+                    res = 100 hata_ise {
+                        döndür 0;
+                    };
+                    döndür res;
+                }
+            }
+            sonuc_basarili = test_hata(yanlış);
+            sonuc_hatali = test_hata(doğru);
+        "#;
+        let res = run_src(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, env) = res.unwrap();
+        assert_eq!(env.get("sonuc_basarili"), Some(Val::Number(100.0)));
+        assert_eq!(env.get("sonuc_hatali"), Some(Val::Number(500.0)));
     }
 }
 
