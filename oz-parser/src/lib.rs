@@ -110,6 +110,13 @@ fn expr_parser(
                         "inci", "ıncı", "uncu", "üncü", "nci", "ncı", "ncu", "ncü",
                     ]))
                     .then_ignore(suffix_parser(&["elemanı", "elemani", "değeri", "degeri"])),
+            )
+            .or(
+                suffix_parser(&["in", "ın", "un", "ün", "nin", "nın", "nun", "nün"]).ignore_then(
+                    ident_parser().map_with_span(|name, span| {
+                        Spanned::new(Expr::Literal(Literal::String(name)), span)
+                    }),
+                ),
             );
 
         let indexed_atom = atom.then(index_suffix.repeated()).foldl(|array, index| {

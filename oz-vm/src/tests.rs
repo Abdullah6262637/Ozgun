@@ -396,3 +396,23 @@ fn test_dahil_et_std() {
     assert_eq!(vm.get_global("kok_degeri"), Some(Val::Number(3.0)));
     assert_eq!(vm.get_global("ust_degeri"), Some(Val::Number(8.0)));
 }
+
+#[test]
+fn test_harita_iyelik_erisim() {
+    let src = r#"
+        ogrenci = {};
+        ogrenci["ad"] = "Ali";
+        ogrenci["yas"] = 20;
+
+        ogrenci_adi = ogrenci'nin ad;
+        ogrenci_yasi = ogrenci'nin yas;
+    "#;
+    let res = run_bytecode(src);
+    assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+    let (_, vm) = res.unwrap();
+    assert_eq!(
+        vm.get_global("ogrenci_adi"),
+        Some(Val::String("Ali".to_string()))
+    );
+    assert_eq!(vm.get_global("ogrenci_yasi"), Some(Val::Number(20.0)));
+}
