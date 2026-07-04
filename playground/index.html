@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -329,11 +329,14 @@
                 <option value="kosul">Koşul Yapısı (ise/değilse)</option>
                 <option value="dongu">Döngü Yapıları (iken / aralık)</option>
                 <option value="islev">Fonksiyon Tanımı</option>
-                <option value="hesap">Temel Matematik İşlemleri</option>
+                <option value="hesap">Matematik & Zaman Kütüphanesi</option>
+                <option value="diziler">Dizi & Sonek İndeksleme</option>
+                <option value="hata_yonetimi">Türkçe Hata Yönetimi (hata_ise)</option>
+                <option value="asenkron">Zarf-Fiil Asenkron Görevler</option>
             </select>
             <button class="btn" id="runBtn" style="margin-left: 1.5rem;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                Çalıştırmak
+                Çalıştır
             </button>
         </div>
     </header>
@@ -423,16 +426,47 @@ i, 1'den 5'e dek artarak {
 
 sonuç = topla(10, 20);
 yazdır("topla sonucu:", sonuç);`,
-            hesap: `a = 15;
-b = 4;
-toplam = a + b;
-fark = a - b;
-çarpım = a * b;
-bölüm = a / b;
-kalan = a % b;
+            hesap: `karekok_deger = kök(16);
+us_deger = üs(2, 3);
+mutlak_deger = mutlak(0 - 42);
+simdi_zaman = şimdi();
 
-yazdır("Toplam:", toplam);
-yazdır("Kalan:", kalan);`
+yazdır("Karekök 16:", karekok_deger);
+yazdır("2 üssü 3:", us_deger);
+yazdır("Mutlak -42:", mutlak_deger);
+yazdır("Unix Zaman:", simdi_zaman);`,
+            diziler: `dizimiz = [100, 200, 300, 400];
+yazdır("Dizi:", dizimiz);
+yazdır("Dizinin boyutu:", boyut(dizimiz));
+
+ekle(dizimiz, 500);
+yazdır("Eleman eklenmiş hali:", dizimiz);
+
+// Klasik ve Türkçe sonek indeksleme yöntemleri:
+yazdır("dizimiz[0]:", dizimiz[0]);
+yazdır("dizimiz'in 2'nci elemanı:", dizimiz'in 2'nci elemanı);`,
+            hata_yonetimi: `// Hata fırlatma ve yakalama kontrolü:
+yazdır("İşlem başlatılıyor...");
+
+hatali_islem = kök(0 - 9) hata_ise {
+    yazdır("Hata yakalandı!");
+    yazdır("Detay:", hata_mesajı);
+    döndür 999;
+};
+
+yazdır("Sonuç:", hatali_islem);`,
+            asenkron: `işlev hesaplama_gorevi(x, y) {
+    uyku(500); // 500 ms simüle et
+    döndür x * y;
+}
+
+görev = arkaplanda_çalıştır(hesaplama_gorevi, 6, 7);
+yazdır("Görev arka planda başlatıldı...");
+
+görev tamamlanınca {
+    yazdır("Arka plan görevi bitti!");
+    yazdır("Görevin döndürdüğü sonuç:", sonuç);
+}`
         };
 
         // --- 2. EDITOR INTERACTION & LINE NUMBERS ---
@@ -490,7 +524,9 @@ yazdır("Kalan:", kalan);`
             Plus: 'Plus', Minus: 'Minus', Mul: 'Mul', Div: 'Div', Mod: 'Mod',
             And: 'And', Or: 'Or',
             LParen: 'LParen', RParen: 'RParen', LBrace: 'LBrace', RBrace: 'RBrace',
+            LBracket: 'LBracket', RBracket: 'RBracket',
             Comma: 'Comma', Semicolon: 'Semicolon',
+            HataIse: 'HataIse', Tamamlaninca: 'Tamamlaninca',
             Number: 'Number', String: 'String', Identifier: 'Identifier'
         };
 
@@ -526,6 +562,8 @@ yazdır("Kalan:", kalan);`
                 if (char === ')') { tokens.push({ type: TokenType.RParen, val: ')' }); idx++; continue; }
                 if (char === '{') { tokens.push({ type: TokenType.LBrace, val: '{' }); idx++; continue; }
                 if (char === '}') { tokens.push({ type: TokenType.RBrace, val: '}' }); idx++; continue; }
+                if (char === '[') { tokens.push({ type: TokenType.LBracket, val: '[' }); idx++; continue; }
+                if (char === ']') { tokens.push({ type: TokenType.RBracket, val: ']' }); idx++; continue; }
                 if (char === ',') { tokens.push({ type: TokenType.Comma, val: ',' }); idx++; continue; }
                 if (char === ';') { tokens.push({ type: TokenType.Semicolon, val: ';' }); idx++; continue; }
 
@@ -572,6 +610,8 @@ yazdır("Kalan:", kalan);`
                     else if (val === 'boş') tokens.push({ type: TokenType.Bos, val });
                     else if (val === 've') tokens.push({ type: TokenType.And, val });
                     else if (val === 'veya') tokens.push({ type: TokenType.Or, val });
+                    else if (val === 'hata_ise') tokens.push({ type: TokenType.HataIse, val });
+                    else if (val === 'tamamlanınca' || val === 'tamamlandığında') tokens.push({ type: TokenType.Tamamlaninca, val });
                     else tokens.push({ type: TokenType.Identifier, val });
                     
                     idx = end;
@@ -662,13 +702,10 @@ yazdır("Kalan:", kalan);`
                     return { type: 'Return', expr };
                 }
 
-                // If conditional: expr ise { ... } değilse { ... }
-                // Since expressions are parsed first, let's parse expression, then check if 'ise/se' suffix is present
                 const expr = this.parseExpr();
                 
-                // If it is followed by 'ise' or 'se'
                 if (this.peek() && this.peek().type === TokenType.Identifier && ['ise', 'se'].includes(this.peek().val)) {
-                    this.next(); // Consume 'ise'/'se'
+                    this.next();
                     const thenBlock = this.parseBlock();
                     let elseBlock = null;
                     if (this.match(TokenType.Degilse)) {
@@ -677,15 +714,17 @@ yazdır("Kalan:", kalan);`
                     return { type: 'If', cond: expr, thenBlock, elseBlock };
                 }
 
-                // While loop: expr iken { ... }
                 if (this.peek() && this.peek().type === TokenType.Identifier && this.peek().val === 'iken') {
-                    this.next(); // Consume 'iken'
+                    this.next();
                     const body = this.parseBlock();
                     return { type: 'While', cond: expr, body };
                 }
 
-                // For range loop: i , 1 'den 5 'e dek artarak { ... }
-                // In our grammar, the statement starts with identifier `i`
+                if (this.match(TokenType.Tamamlaninca)) {
+                    const body = this.parseBlock();
+                    return { type: 'Tamamlaninca', gorev: expr, body };
+                }
+
                 if (expr.type === 'Identifier' && this.match(TokenType.Comma)) {
                     const startExpr = this.parseExpr();
                     const suffix1 = this.matchSuffix(['dan', 'den', 'tan', 'ten']);
@@ -708,14 +747,12 @@ yazdır("Kalan:", kalan);`
                     return { type: 'For', var: expr.val, start: startExpr, end: endExpr, stepDir, body };
                 }
 
-                // x = 5;
                 if (expr.type === 'Identifier' && this.match(TokenType.Assign)) {
                     const valExpr = this.parseExpr();
                     this.expect(TokenType.Semicolon, "Satır sonu ';' bekleniyordu");
                     return { type: 'VarDecl', name: expr.val, val: valExpr };
                 }
 
-                // Expression statement (e.g. call)
                 this.expect(TokenType.Semicolon, "Satır sonu ';' bekleniyordu");
                 return { type: 'ExprStmt', expr };
             }
@@ -731,7 +768,12 @@ yazdır("Kalan:", kalan);`
             }
 
             parseExpr() {
-                return this.parseLogicalOr();
+                let node = this.parseLogicalOr();
+                if (this.match(TokenType.HataIse)) {
+                    const body = this.parseBlock();
+                    node = { type: 'HataIse', base: node, body };
+                }
+                return node;
             }
 
             parseLogicalOr() {
@@ -778,10 +820,33 @@ yazdır("Kalan:", kalan);`
             }
 
             parseFactor() {
-                let node = this.parsePrimary();
+                let node = this.parseIndexed();
                 let op;
                 while ((op = this.match(TokenType.Mul) || this.match(TokenType.Div) || this.match(TokenType.Mod))) {
-                    node = { type: 'Binary', left: node, op: op.type, right: this.parsePrimary() };
+                    node = { type: 'Binary', left: node, op: op.type, right: this.parseIndexed() };
+                }
+                return node;
+            }
+
+            parseIndexed() {
+                let node = this.parsePrimary();
+                while (true) {
+                    if (this.match(TokenType.LBracket)) {
+                        const index = this.parseExpr();
+                        this.expect(TokenType.RBracket, "']' bekleniyordu");
+                        node = { type: 'Index', array: node, index };
+                    } else if (this.peek() && this.peek().type === TokenType.Identifier &&
+                               ['in', 'ın', 'un', 'ün', 'nin', 'nın', 'nun', 'nün'].includes(this.peek().val)) {
+                        this.next();
+                        const index = this.parseExpr();
+                        const ordinal = this.matchSuffix(['inci', 'ıncı', 'uncu', 'üncü', 'nci', 'ncı', 'ncu', 'ncü']);
+                        if (!ordinal) throw new Error("Sonekli dizi erişiminde sıra eki (inci/ıncı/nci...) bekleniyordu");
+                        const elem = this.matchSuffix(['elemanı', 'elemani', 'değeri', 'degeri']);
+                        if (!elem) throw new Error("Sonekli dizi erişiminde 'elemanı' veya 'değeri' kelimesi bekleniyordu");
+                        node = { type: 'Index', array: node, index };
+                    } else {
+                        break;
+                    }
                 }
                 return node;
             }
@@ -794,6 +859,18 @@ yazdır("Kalan:", kalan);`
                 if (this.match(TokenType.Yanlis)) return { type: 'Literal', val: false };
                 if (this.match(TokenType.Bos)) return { type: 'Literal', val: null };
                 
+                if (this.match(TokenType.LBracket)) {
+                    const elements = [];
+                    if (this.peek() && this.peek().type !== TokenType.RBracket) {
+                        elements.push(this.parseExpr());
+                        while (this.match(TokenType.Comma)) {
+                            elements.push(this.parseExpr());
+                        }
+                    }
+                    this.expect(TokenType.RBracket, "']' bekleniyordu");
+                    return { type: 'Array', elements };
+                }
+
                 if (tok.type === TokenType.Number) {
                     return { type: 'Literal', val: parseFloat(this.next().val) };
                 }
@@ -803,7 +880,6 @@ yazdır("Kalan:", kalan);`
 
                 if (tok.type === TokenType.Identifier) {
                     this.next();
-                    // Call check
                     if (this.match(TokenType.LParen)) {
                         const args = [];
                         if (this.peek() && this.peek().type !== TokenType.RParen) {
@@ -869,10 +945,140 @@ yazdır("Kalan:", kalan);`
                             if (a === null) return 'boş';
                             if (a === true) return 'doğru';
                             if (a === false) return 'yanlış';
+                            if (a && a.type === 'Hata') return `Hata("${a.val}")`;
+                            if (a && a.type === 'Task') return `Task`;
+                            if (Array.isArray(a)) {
+                                return '[' + a.map(item => {
+                                    if (item === null) return 'boş';
+                                    if (item === true) return 'doğru';
+                                    if (item === false) return 'yanlış';
+                                    if (typeof item === 'string') return `"${item}"`;
+                                    return item.toString();
+                                }).join(', ') + ']';
+                            }
                             return a.toString();
                         }).join(' '));
                         return null;
                     }
+                });
+
+                const addBuiltin = (name, fn) => {
+                    this.env.bindings.set(name, {
+                        type: 'Builtin',
+                        call: fn
+                    });
+                };
+
+                addBuiltin('boyut', (args) => {
+                    if (args.length === 1 && Array.isArray(args[0])) {
+                        return args[0].length;
+                    }
+                    return 0;
+                });
+
+                addBuiltin('ekle', (args) => {
+                    if (args.length === 2 && Array.isArray(args[0])) {
+                        args[0].push(args[1]);
+                    }
+                    return null;
+                });
+
+                addBuiltin('hata_fırlat', (args) => {
+                    const msg = args.length >= 1 ? args[0] : "Bilinmeyen hata";
+                    return { type: 'Hata', val: msg.toString() };
+                });
+
+                addBuiltin('dosya_yaz', (args) => {
+                    if (args.length === 2) {
+                        const path = args[0].toString();
+                        const content = args[1].toString();
+                        try {
+                            localStorage.setItem('tilk_fs_' + path, content);
+                            return true;
+                        } catch (e) {
+                            return { type: 'Hata', val: e.message };
+                        }
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: dosya_yaz(yol, içerik)' };
+                });
+
+                addBuiltin('dosya_oku', (args) => {
+                    if (args.length === 1) {
+                        const path = args[0].toString();
+                        const content = localStorage.getItem('tilk_fs_' + path);
+                        if (content === null) {
+                            return { type: 'Hata', val: `Dosya okunamadı: Dosya bulunamadı: ${path}` };
+                        }
+                        return content;
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: dosya_oku(yol)' };
+                });
+
+                addBuiltin('dosya_sil', (args) => {
+                    if (args.length === 1) {
+                        const path = args[0].toString();
+                        if (localStorage.getItem('tilk_fs_' + path) === null) {
+                            return { type: 'Hata', val: `Dosya silinemedi: Dosya bulunamadı: ${path}` };
+                        }
+                        localStorage.removeItem('tilk_fs_' + path);
+                        return true;
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: dosya_sil(yol)' };
+                });
+
+                addBuiltin('arkaplanda_çalıştır', (args) => {
+                    if (args.length >= 1) {
+                        const func = args[0];
+                        const funcArgs = args.slice(1);
+                        return {
+                            type: 'Task',
+                            completed: false,
+                            func: func,
+                            args: funcArgs,
+                            result: null
+                        };
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: arkaplanda_çalıştır(işlev, ...)' };
+                });
+                this.env.bindings.set('arkaplanda_calistir', this.env.bindings.get('arkaplanda_çalıştır'));
+
+                addBuiltin('kök', (args) => {
+                    if (args.length === 1 && typeof args[0] === 'number') {
+                        if (args[0] >= 0) return Math.sqrt(args[0]);
+                        return { type: 'Hata', val: 'Negatif sayının karekökü alınamaz' };
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: kök(sayı)' };
+                });
+                this.env.bindings.set('karekok', this.env.bindings.get('kök'));
+
+                addBuiltin('üs', (args) => {
+                    if (args.length === 2 && typeof args[0] === 'number' && typeof args[1] === 'number') {
+                        return Math.pow(args[0], args[1]);
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: üs(taban, üs)' };
+                });
+                this.env.bindings.set('ust', this.env.bindings.get('üs'));
+
+                addBuiltin('mutlak', (args) => {
+                    if (args.length === 1 && typeof args[0] === 'number') {
+                        return Math.abs(args[0]);
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: mutlak(sayı)' };
+                });
+
+                addBuiltin('şimdi', (args) => {
+                    return Date.now() / 1000;
+                });
+                this.env.bindings.set('simdi', this.env.bindings.get('şimdi'));
+
+                addBuiltin('uyku', (args) => {
+                    if (args.length === 1 && typeof args[0] === 'number') {
+                        const ms = args[0];
+                        const start = Date.now();
+                        while (Date.now() - start < ms) {}
+                        return null;
+                    }
+                    return { type: 'Hata', val: 'Geçersiz argüman: uyku(milisaniye)' };
                 });
             }
 
@@ -894,9 +1100,35 @@ yazdır("Kalan:", kalan);`
                         const val = env.get(expr.val);
                         if (val === undefined) throw new Error(`Tanımlanamayan değişken '${expr.val}'`);
                         return val;
+                    case 'Array':
+                        return expr.elements.map(el => this.evalExpr(el, env));
+                    case 'Index':
+                        const arr = this.evalExpr(expr.array, env);
+                        if (arr && arr.type === 'Hata') return arr;
+                        const idx = this.evalExpr(expr.index, env);
+                        if (idx && idx.type === 'Hata') return idx;
+                        if (Array.isArray(arr)) {
+                            if (typeof idx !== 'number') throw new Error("HATA: Dizi indeksi sayı olmalıdır");
+                            const i = Math.floor(idx);
+                            if (i < 0 || i >= arr.length) throw new Error(`HATA: Dizi sınırları dışında: indeks ${i}, boyut ${arr.length}`);
+                            return arr[i];
+                        }
+                        throw new Error("HATA: Sadece diziler indekslenebilir");
+                    case 'HataIse':
+                        const baseVal = this.evalExpr(expr.base, env);
+                        if (baseVal && baseVal.type === 'Hata') {
+                            const childEnv = new Env(env);
+                            childEnv.bindings.set('hata_mesajı', baseVal.val);
+                            childEnv.bindings.set('hata_mesaji', baseVal.val);
+                            const res = this.evalBlock(expr.body, childEnv);
+                            return res ? res.val : null;
+                        }
+                        return baseVal;
                     case 'Binary':
                         const left = this.evalExpr(expr.left, env);
+                        if (left && left.type === 'Hata') return left;
                         const right = this.evalExpr(expr.right, env);
+                        if (right && right.type === 'Hata') return right;
                         switch (expr.op) {
                             case 'Plus': return left + right;
                             case 'Minus': return left - right;
@@ -920,6 +1152,10 @@ yazdır("Kalan:", kalan);`
                         if (!func) throw new Error(`Tanımlanamayan işlev '${expr.name}'`);
                         
                         const args = expr.args.map(a => this.evalExpr(a, env));
+                        // Propagate error from arguments
+                        for (let arg of args) {
+                            if (arg && arg.type === 'Hata') return arg;
+                        }
                         if (func.type === 'Builtin') {
                             return func.call(args);
                         } else if (func.type === 'Function') {
@@ -948,6 +1184,7 @@ yazdır("Kalan:", kalan);`
                         return null;
                     case 'If':
                         const cond = this.evalExpr(stmt.cond, env);
+                        if (cond && cond.type === 'Hata') return cond;
                         if (cond === true) {
                             return this.evalBlock(stmt.thenBlock, env);
                         } else if (stmt.elseBlock) {
@@ -955,7 +1192,10 @@ yazdır("Kalan:", kalan);`
                         }
                         return null;
                     case 'While':
-                        while (this.evalExpr(stmt.cond, env) === true) {
+                        while (true) {
+                            const condition = this.evalExpr(stmt.cond, env);
+                            if (condition && condition.type === 'Hata') return condition;
+                            if (condition !== true) break;
                             const res = this.evalBlock(stmt.body, env);
                             if (res && res.returned) return res;
                         }
@@ -963,6 +1203,8 @@ yazdır("Kalan:", kalan);`
                     case 'For':
                         const start = this.evalExpr(stmt.start, env);
                         const end = this.evalExpr(stmt.end, env);
+                        if (start && start.type === 'Hata') return start;
+                        if (end && end.type === 'Hata') return end;
                         if (typeof start !== 'number' || typeof end !== 'number') {
                             throw new Error("Döngü aralık sınırları sayı olmalıdır");
                         }
@@ -989,6 +1231,36 @@ yazdır("Kalan:", kalan);`
                     case 'Return':
                         const retVal = stmt.expr ? this.evalExpr(stmt.expr, env) : null;
                         return { returned: true, val: retVal };
+                    case 'Tamamlaninca':
+                        const taskVal = this.evalExpr(stmt.gorev, env);
+                        if (taskVal && taskVal.type === 'Hata') return taskVal;
+                        let resultVal;
+                        if (taskVal && taskVal.type === 'Task') {
+                            if (!taskVal.completed) {
+                                const func = taskVal.func;
+                                const args = taskVal.args;
+                                if (func && func.type === 'Function') {
+                                    const childEnv = new Env(env);
+                                    for (let i = 0; i < func.params.length; i++) {
+                                        childEnv.bindings.set(func.params[i], args[i]);
+                                    }
+                                    const res = this.evalBlock(func.body, childEnv);
+                                    taskVal.result = res ? res.val : null;
+                                } else if (func && func.type === 'Builtin') {
+                                    taskVal.result = func.call(args);
+                                } else {
+                                    throw new Error("HATA: Görev çağrılabilir bir işlev içermiyor");
+                                }
+                                taskVal.completed = true;
+                            }
+                            resultVal = taskVal.result;
+                        } else {
+                            resultVal = taskVal;
+                        }
+                        const childEnv = new Env(env);
+                        childEnv.bindings.set('sonuç', resultVal);
+                        childEnv.bindings.set('sonuc', resultVal);
+                        return this.evalBlock(stmt.body, childEnv);
                 }
             }
 
@@ -996,7 +1268,7 @@ yazdır("Kalan:", kalan);`
                 const childEnv = new Env(env);
                 for (let stmt of body) {
                     const res = this.evalStmt(stmt, childEnv);
-                    if (res && res.returned) return res;
+                    if (res && (res.returned || (res.type === 'Hata'))) return res;
                 }
                 return null;
             }
