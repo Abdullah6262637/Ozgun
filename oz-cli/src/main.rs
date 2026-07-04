@@ -5,8 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(ClapParser)]
-#[command(name = "oz")]
-#[command(about = "ÖZGÜN Dili Araç Zinciri CLI", long_about = None)]
+#[command(name = "tilk")]
+#[command(about = "TİLK Dili Araç Zinciri CLI", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -140,26 +140,26 @@ fn main() {
             let target_file = match file {
                 Some(f) => f,
                 None => {
-                    // Look for ozgun.toml
-                    let toml_path = PathBuf::from("ozgun.toml");
+                    // Look for tilk.toml
+                    let toml_path = PathBuf::from("tilk.toml");
                     if toml_path.exists() {
                         let toml_str = match fs::read_to_string(&toml_path) {
                             Ok(s) => s,
                             Err(e) => {
-                                eprintln!("ozgun.toml okunamadı: {}", e);
+                                eprintln!("tilk.toml okunamadı: {}", e);
                                 std::process::exit(1);
                             }
                         };
                         let config: PackageConfig = match toml::from_str(&toml_str) {
                             Ok(c) => c,
                             Err(e) => {
-                                eprintln!("ozgun.toml ayrıştırılamadı: {}", e);
+                                eprintln!("tilk.toml ayrıştırılamadı: {}", e);
                                 std::process::exit(1);
                             }
                         };
                         PathBuf::from(config.paket.giris)
                     } else {
-                        eprintln!("HATA: Çalıştırılacak dosya belirtilmedi ve ozgun.toml bulunamadı.");
+                        eprintln!("HATA: Çalıştırılacak dosya belirtilmedi ve tilk.toml bulunamadı.");
                         std::process::exit(1);
                     }
                 }
@@ -186,7 +186,7 @@ fn main() {
             fs::create_dir_all(&kaynak_dir).unwrap();
             fs::create_dir_all(&testler_dir).unwrap();
 
-            // Create ozgun.toml
+            // Create tilk.toml
             let toml_content = format!(
                 r#"[paket]
 ad = "{}"
@@ -195,7 +195,7 @@ giris = "kaynak/ana.oz"
 "#,
                 isim
             );
-            fs::write(root_dir.join("ozgun.toml"), toml_content).unwrap();
+            fs::write(root_dir.join("tilk.toml"), toml_content).unwrap();
 
             // Create kaynak/ana.oz
             let main_content = r#"yazdır("Merhaba Dünya!");
@@ -209,12 +209,12 @@ giris = "kaynak/ana.oz"
 "#;
             fs::write(testler_dir.join("test_ana.oz"), test_content).unwrap();
 
-            println!("Başarılı: '{}' adında yeni bir ÖZGÜN projesi oluşturuldu.", isim);
+            println!("Başarılı: '{}' adında yeni bir TİLK projesi oluşturuldu.", isim);
         }
         Commands::Derle => {
-            let toml_path = PathBuf::from("ozgun.toml");
+            let toml_path = PathBuf::from("tilk.toml");
             if !toml_path.exists() {
-                eprintln!("HATA: ozgun.toml bulunamadı. ÖZGÜN projesi dizininde değilsiniz.");
+                eprintln!("HATA: tilk.toml bulunamadı. TİLK projesi dizininde değilsiniz.");
                 std::process::exit(1);
             }
 
@@ -232,9 +232,9 @@ giris = "kaynak/ana.oz"
             }
         }
         Commands::Test => {
-            let toml_path = PathBuf::from("ozgun.toml");
+            let toml_path = PathBuf::from("tilk.toml");
             if !toml_path.exists() {
-                eprintln!("HATA: ozgun.toml bulunamadı. ÖZGÜN projesi dizininde değilsiniz.");
+                eprintln!("HATA: tilk.toml bulunamadı. TİLK projesi dizininde değilsiniz.");
                 std::process::exit(1);
             }
 
