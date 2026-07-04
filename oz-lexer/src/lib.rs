@@ -25,6 +25,10 @@ pub enum Token {
     #[token("hata_ise")]
     HataIse,
 
+    #[token("tamamlanınca")]
+    #[token("tamamlandığında")]
+    Tamamlaninca,
+
     // Operators
     #[token("=")]
     Assign,

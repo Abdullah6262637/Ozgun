@@ -215,12 +215,19 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
             .then_ignore(just(Token::Semicolon))
             .map(Statement::Expr);
 
+        // görev tamamlanınca { ... }
+        let tamamlaninca_stmt = expr.clone()
+            .then_ignore(just(Token::Tamamlaninca))
+            .then(block.clone())
+            .map(|(gorev, body)| Statement::Tamamlaninca(gorev, body));
+
         assign_or_decl
             .or(if_stmt)
             .or(while_stmt)
             .or(for_stmt)
             .or(fn_decl)
             .or(return_stmt)
+            .or(tamamlaninca_stmt)
             .or(expr_stmt)
     })
 }

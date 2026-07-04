@@ -1,4 +1,4 @@
-use crate::instruction::{Instruction, Val};
+use crate::instruction::{Instruction, Val, TaskState};
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,6 +26,8 @@ impl VM {
         globals.insert("dosya_oku".to_string(), Val::Builtin("dosya_oku".to_string()));
         globals.insert("dosya_yaz".to_string(), Val::Builtin("dosya_yaz".to_string()));
         globals.insert("dosya_sil".to_string(), Val::Builtin("dosya_sil".to_string()));
+        globals.insert("arkaplanda_çalıştır".to_string(), Val::Builtin("arkaplanda_çalıştır".to_string()));
+        globals.insert("arkaplanda_calistir".to_string(), Val::Builtin("arkaplanda_çalıştır".to_string()));
 
         VM {
             instructions,
@@ -323,6 +325,24 @@ impl VM {
                                 } else {
                                     self.stack.push(Val::Hata("Geçersiz argüman: dosya_sil(yol)".to_string()));
                                 }
+                            } else if name == "arkaplanda_çalıştır" {
+                                let mut call_args = Vec::new();
+                                for _ in 0..*arg_count {
+                                    call_args.push(self.stack.pop().ok_or("HATA: Yığın boş (calistir args)")?);
+                                }
+                                call_args.reverse();
+                                if call_args.len() >= 1 {
+                                    let func = call_args[0].clone();
+                                    let func_args = call_args[1..].to_vec();
+                                    self.stack.push(Val::Task(Rc::new(RefCell::new(TaskState {
+                                        completed: false,
+                                        func,
+                                        args: func_args,
+                                        result: Val::Bos,
+                                    }))));
+                                } else {
+                                    self.stack.push(Val::Hata("Geçersiz argüman: arkaplanda_çalıştır(işlev, ...)".to_string()));
+                                }
                             } else {
                                 return Err(format!("HATA: Bilinmeyen dahili işlev '{}'", name));
                             }
@@ -374,6 +394,119 @@ impl VM {
                         _ => {
                             self.stack.push(val);
                             self.ip = *dest;
+                        }
+                    }
+                }
+                Instruction::AwaitTask => {
+                    let task_val = self.stack.pop().ok_or("HATA: Yığın boş (AwaitTask)")?;
+                    match task_val {
+                        Val::Task(task_cell) => {
+                            let mut task = task_cell.borrow_mut();
+                            if !task.completed {
+                                match &task.func {
+                                    Val::Function { name: _, param_count: _, entry_ip } => {
+                                        let mut sub_vm = VM::new(self.instructions.clone());
+                                        sub_vm.globals = self.globals.clone();
+                                        for arg in &task.args {
+                                            sub_vm.stack.push(arg.clone());
+                                        }
+                                        sub_vm.frames.push(Frame {
+                                            return_address: self.instructions.len(),
+                                            locals: HashMap::new(),
+                                        });
+                                        sub_vm.ip = *entry_ip;
+                                        sub_vm.run()?;
+                                        let res = sub_vm.stack.pop().unwrap_or(Val::Bos);
+                                        self.globals = sub_vm.globals;
+                                        task.result = res;
+                                        task.completed = true;
+                                    }
+                                    Val::Builtin(name) => {
+                                        let result = if name == "yazdır" {
+                                            for arg in &task.args {
+                                                print!("{:?} ", arg);
+                                            }
+                                            println!();
+                                            Val::Bos
+                                        } else if name == "boyut" {
+                                            if task.args.len() == 1 {
+                                                if let Val::Array(arr) = &task.args[0] {
+                                                    Val::Number(arr.borrow().len() as f64)
+                                                } else {
+                                                    Val::Number(0.0)
+                                                }
+                                            } else {
+                                                Val::Number(0.0)
+                                            }
+                                        } else if name == "ekle" {
+                                            if task.args.len() == 2 {
+                                                if let Val::Array(arr) = &task.args[0] {
+                                                    arr.borrow_mut().push(task.args[1].clone());
+                                                }
+                                            }
+                                            Val::Bos
+                                        } else if name == "hata_fırlat" {
+                                            let msg = if task.args.len() >= 1 {
+                                                match &task.args[0] {
+                                                    Val::String(s) => s.clone(),
+                                                    _ => format!("{:?}", task.args[0]),
+                                                }
+                                            } else {
+                                                "Bilinmeyen hata".to_string()
+                                            };
+                                            Val::Hata(msg)
+                                        } else if name == "dosya_oku" {
+                                            if task.args.len() == 1 {
+                                                if let Val::String(path) = &task.args[0] {
+                                                    match std::fs::read_to_string(path) {
+                                                        Ok(content) => Val::String(content),
+                                                        Err(e) => Val::Hata(format!("Dosya okunamadı: {}", e)),
+                                                    }
+                                                } else {
+                                                    Val::Hata("Geçersiz argüman: dosya_oku(yol)".to_string())
+                                                }
+                                            } else {
+                                                Val::Hata("dosya_oku() tek bir parametre alır".to_string())
+                                            }
+                                        } else if name == "dosya_yaz" {
+                                            if task.args.len() == 2 {
+                                                if let (Val::String(path), Val::String(content)) = (&task.args[0], &task.args[1]) {
+                                                    match std::fs::write(path, content) {
+                                                        Ok(_) => Val::Boolean(true),
+                                                        Err(e) => Val::Hata(format!("Dosya yazılamadı: {}", e)),
+                                                    }
+                                                } else {
+                                                    Val::Hata("Geçersiz argüman: dosya_yaz(yol, içerik)".to_string())
+                                                }
+                                            } else {
+                                                Val::Hata("dosya_yaz() iki parametre alır".to_string())
+                                            }
+                                        } else if name == "dosya_sil" {
+                                            if task.args.len() == 1 {
+                                                if let Val::String(path) = &task.args[0] {
+                                                    match std::fs::remove_file(path) {
+                                                        Ok(_) => Val::Boolean(true),
+                                                        Err(e) => Val::Hata(format!("Dosya silinemedi: {}", e)),
+                                                    }
+                                                } else {
+                                                    Val::Hata("Geçersiz argüman: dosya_sil(yol)".to_string())
+                                                }
+                                            } else {
+                                                Val::Hata("dosya_sil() tek bir parametre alır".to_string())
+                                            }
+                                        } else {
+                                            Val::Bos
+                                        };
+                                        task.result = result;
+                                        task.completed = true;
+                                    }
+                                    _ => return Err("HATA: Görev çağrılabilir bir işlev içermiyor".to_string()),
+                                }
+                            }
+                            self.stack.push(task.result.clone());
+                        }
+                        other => {
+                            self.stack.push(other);
                         }
                     }
                 }

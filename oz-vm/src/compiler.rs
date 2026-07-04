@@ -211,6 +211,16 @@ impl Compiler {
                 }
                 self.instructions.push(Instruction::Return);
             }
+            Statement::Tamamlaninca(gorev_expr, body) => {
+                self.compile_expr(gorev_expr)?;
+                self.instructions.push(Instruction::AwaitTask);
+                self.instructions.push(Instruction::Store("sonuç".to_string()));
+                self.instructions.push(Instruction::Load("sonuç".to_string()));
+                self.instructions.push(Instruction::Store("sonuc".to_string()));
+                for s in body {
+                    self.compile_stmt(s)?;
+                }
+            }
         }
         Ok(())
     }

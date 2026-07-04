@@ -16,6 +16,15 @@ pub enum Val {
     Builtin(Rc<dyn Fn(Vec<Val>) -> Val>),
     Array(Rc<RefCell<Vec<Val>>>),
     Hata(String),
+    Task(Rc<RefCell<TaskState>>),
+}
+
+#[derive(Clone)]
+pub struct TaskState {
+    pub completed: bool,
+    pub func: Val,
+    pub args: Vec<Val>,
+    pub result: Val,
 }
 
 impl std::fmt::Debug for Val {
@@ -39,6 +48,7 @@ impl std::fmt::Debug for Val {
                 write!(f, "]")
             }
             Val::Hata(msg) => write!(f, "Hata({:?})", msg),
+            Val::Task(_) => write!(f, "Task"),
         }
     }
 }
@@ -52,6 +62,7 @@ impl PartialEq for Val {
             (Val::Bos, Val::Bos) => true,
             (Val::Array(a), Val::Array(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Val::Hata(a), Val::Hata(b)) => a == b,
+            (Val::Task(a), Val::Task(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -217,6 +228,22 @@ pub fn create_global_env() -> Env {
             Val::Hata("Geçersiz argüman: dosya_sil(yol)".to_string())
         })),
     );
+    // Built-in function "arkaplanda_çalıştır" / "calistir"
+    let calistir_builtin = Val::Builtin(Rc::new(|args| {
+        if args.len() >= 1 {
+            let func = args[0].clone();
+            let remaining_args = args[1..].to_vec();
+            return Val::Task(Rc::new(RefCell::new(TaskState {
+                completed: false,
+                func,
+                args: remaining_args,
+                result: Val::Bos,
+            })));
+        }
+        Val::Hata("Geçersiz argüman: arkaplanda_çalıştır(işlev, ...)".to_string())
+    }));
+    env.set("arkaplanda_çalıştır".to_string(), calistir_builtin.clone());
+    env.set("arkaplanda_calistir".to_string(), calistir_builtin);
     env
 }
 
@@ -473,6 +500,39 @@ pub fn eval_stmt(stmt: &Statement, env: &Env) -> Result<Option<Val>, String> {
             eval_expr(expr, env)?;
             Ok(None)
         }
+        Statement::Tamamlaninca(gorev_expr, body) => {
+            let val = eval_expr(gorev_expr, env)?;
+            let result_val = match val {
+                Val::Task(task_cell) => {
+                    let mut task = task_cell.borrow_mut();
+                    if !task.completed {
+                        let res = match &task.func {
+                            Val::Function { params, body } => {
+                                let child_env = Env::extend(env);
+                                for (param, val) in params.iter().zip(&task.args) {
+                                    child_env.set(param.clone(), val.clone());
+                                }
+                                let ret = eval_program(body, &child_env)?;
+                                ret.unwrap_or(Val::Bos)
+                            }
+                            Val::Builtin(f) => {
+                                f(task.args.clone())
+                            }
+                            _ => return Err("HATA: Görev çağrılabilir bir işlev içermiyor".to_string()),
+                        };
+                        task.result = res;
+                        task.completed = true;
+                    }
+                    task.result.clone()
+                }
+                other => other,
+            };
+
+            let child_env = Env::extend(env);
+            child_env.set("sonuç".to_string(), result_val.clone());
+            child_env.set("sonuc".to_string(), result_val);
+            eval_program(body, &child_env)
+        }
     }
 }
 
@@ -636,6 +696,26 @@ mod tests {
         } else {
             panic!("Hata mesajı string olmalı!");
         }
+    }
+
+    #[test]
+    fn test_asenkron_tamamlaninca() {
+        let src = r#"
+            işlev hesapla(x, y) {
+                döndür x + y;
+            }
+            
+            gorev = arkaplanda_çalıştır(hesapla, 10, 20);
+            
+            yakalanan_sonuc = 0;
+            gorev tamamlanınca {
+                yakalanan_sonuc = sonuç;
+            }
+        "#;
+        let res = run_src(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, env) = res.unwrap();
+        assert_eq!(env.get("yakalanan_sonuc"), Some(Val::Number(30.0)));
     }
 }
 

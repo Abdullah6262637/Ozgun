@@ -60,4 +60,5 @@ pub enum Statement {
     },
     Return(Option<Expr>),
     Expr(Expr),
+    Tamamlaninca(Expr, Vec<Statement>),
 }

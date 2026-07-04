@@ -162,4 +162,24 @@ mod tests {
             panic!("Hata mesajı string olmalı!");
         }
     }
+
+    #[test]
+    fn test_asenkron_tamamlaninca() {
+        let src = r#"
+            işlev hesapla(x, y) {
+                döndür x + y;
+            }
+            
+            gorev = arkaplanda_çalıştır(hesapla, 10, 20);
+            
+            yakalanan_sonuc = 0;
+            gorev tamamlanınca {
+                yakalanan_sonuc = sonuç;
+            }
+        "#;
+        let res = run_bytecode(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, vm) = res.unwrap();
+        assert_eq!(vm.get_global("yakalanan_sonuc"), Some(Val::Number(30.0)));
+    }
 }

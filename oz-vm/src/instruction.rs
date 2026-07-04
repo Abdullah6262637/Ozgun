@@ -16,6 +16,15 @@ pub enum Val {
     Builtin(String),
     Array(Rc<RefCell<Vec<Val>>>),
     Hata(String),
+    Task(Rc<RefCell<TaskState>>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskState {
+    pub completed: bool,
+    pub func: Val,
+    pub args: Vec<Val>,
+    pub result: Val,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,4 +53,5 @@ pub enum Instruction {
     Return,
     Array(usize),
     Index,
+    AwaitTask,
 }
