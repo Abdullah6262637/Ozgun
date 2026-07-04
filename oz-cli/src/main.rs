@@ -51,10 +51,21 @@ enum Commands {
     Yukle,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum Dependency {
+    Version(String),
+    Complex {
+        git: Option<String>,
+        tag: Option<String>,
+        path: Option<String>,
+    },
+}
+
 #[derive(Deserialize)]
 struct PackageConfig {
     paket: PaketDetails,
-    bagimliliklar: Option<std::collections::HashMap<String, String>>,
+    bagimliliklar: Option<std::collections::HashMap<String, Dependency>>,
 }
 
 #[derive(Deserialize)]
@@ -500,11 +511,13 @@ giris = "kaynak/ana.oz"
                 }
 
                 println!("--- Bağımlılıklar Yükleniyor ---");
-                for (ad, surum) in bagimliliklar {
-                    println!("Paket deposu taranıyor: '{}' (sürüm {})...", ad, surum);
-                    let code = match ad.as_str() {
-                        "matematik" => {
-                            r#"
+                for (ad, dep) in bagimliliklar {
+                    match dep {
+                        Dependency::Version(surum) => {
+                            println!("Paket deposu taranıyor: '{}' (sürüm {})...", ad, surum);
+                            let code = match ad.as_str() {
+                                "matematik" => {
+                                    r#"
 işlev topla(a, b) {
     döndür a + b;
 }
@@ -515,9 +528,9 @@ işlev kare(a) {
     döndür üs(a, 2);
 }
 "#
-                        }
-                        "dizi_araclari" => {
-                            r#"
+                                }
+                                "dizi_araclari" => {
+                                    r#"
 işlev ilk_eleman(d) {
     döndür d[0];
 }
@@ -525,21 +538,136 @@ işlev son_eleman(d) {
     döndür d[boyut(d) - 1];
 }
 "#
-                        }
-                        _ => {
-                            eprintln!("HATA: '{}' paketi depoda bulunamadı.", ad);
-                            std::process::exit(1);
-                        }
-                    };
+                                }
+                                _ => {
+                                    eprintln!("HATA: '{}' paketi depoda bulunamadı.", ad);
+                                    std::process::exit(1);
+                                }
+                            };
 
-                    let target_path = kitaplik_dir.join(format!("{}.oz", ad));
-                    fs::write(&target_path, code).unwrap();
-                    println!("  -> İndirildi ve kaydedildi: {}", target_path.display());
+                            let target_path = kitaplik_dir.join(format!("{}.oz", ad));
+                            fs::write(&target_path, code).unwrap();
+                            println!("  -> İndirildi ve kaydedildi: {}", target_path.display());
+                        }
+                        Dependency::Complex { git, tag, path } => {
+                            if let Some(git_url) = git {
+                                println!("Git deposu klonlanıyor: '{}' ({:?})...", git_url, tag);
+                                let target_repo_dir = kitaplik_dir.join(&ad);
+                                if target_repo_dir.exists() {
+                                    let _ = fs::remove_dir_all(&target_repo_dir);
+                                }
+                                let mut git_cmd = std::process::Command::new("git")
+                                    .args(&["clone", &git_url, target_repo_dir.to_str().unwrap()])
+                                    .spawn()
+                                    .map_err(|e| format!("git clone başarısız oldu: {}", e))
+                                    .unwrap();
+
+                                let status = git_cmd
+                                    .wait()
+                                    .map_err(|e| {
+                                        format!("git clone beklenirken hata oluştu: {}", e)
+                                    })
+                                    .unwrap();
+                                if !status.success() {
+                                    eprintln!("HATA: git clone başarısız oldu.");
+                                    std::process::exit(1);
+                                }
+
+                                if let Some(tag_str) = tag {
+                                    let mut checkout_cmd = std::process::Command::new("git")
+                                        .args(&["checkout", &tag_str])
+                                        .current_dir(&target_repo_dir)
+                                        .spawn()
+                                        .map_err(|e| format!("git checkout başarısız oldu: {}", e))
+                                        .unwrap();
+                                    checkout_cmd.wait().unwrap();
+                                }
+                                println!(
+                                    "  -> Git deposu başarıyla yüklendi: {}",
+                                    target_repo_dir.display()
+                                );
+                            } else if let Some(local_path) = path {
+                                println!("Yerel kütüphane kopyalanıyor: '{}'...", local_path);
+                                let src_path = PathBuf::from(local_path);
+                                let target_path = kitaplik_dir.join(format!("{}.oz", ad));
+                                if src_path.is_file() {
+                                    fs::copy(&src_path, &target_path).unwrap();
+                                    println!("  -> Kopyalandı: {}", target_path.display());
+                                } else {
+                                    let target_dir = kitaplik_dir.join(&ad);
+                                    if target_dir.exists() {
+                                        let _ = fs::remove_dir_all(&target_dir);
+                                    }
+                                    fs::create_dir_all(&target_dir).unwrap();
+                                    if let Ok(entries) = fs::read_dir(src_path) {
+                                        for entry in entries.flatten() {
+                                            let ep = entry.path();
+                                            if ep.is_file()
+                                                && ep.extension().map_or(false, |ext| ext == "oz")
+                                            {
+                                                fs::copy(
+                                                    &ep,
+                                                    target_dir.join(ep.file_name().unwrap()),
+                                                )
+                                                .unwrap();
+                                            }
+                                        }
+                                    }
+                                    println!("  -> Klasör kopyalandı: {}", target_dir.display());
+                                }
+                            }
+                        }
+                    }
                 }
                 println!("Tüm bağımlılıklar başarıyla yüklendi!");
             } else {
                 println!("Yüklenecek bağımlılık bulunamadı.");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dependency_deserialization() {
+        let toml_content = r#"
+            [paket]
+            ad = "test_proje"
+            surum = "0.1.0"
+            giris = "ana.oz"
+
+            [bagimliliklar]
+            matematik = "1.0.0"
+            harici_git = { git = "https://github.com/user/repo.git", tag = "v1" }
+            yerel_paket = { path = "./yerel" }
+        "#;
+        let config: PackageConfig = toml::from_str(toml_content).unwrap();
+        let bagimliliklar = config.bagimliliklar.unwrap();
+
+        assert!(matches!(
+            bagimliliklar.get("matematik").unwrap(),
+            Dependency::Version(_)
+        ));
+        if let Dependency::Complex { git, tag, path: _ } = bagimliliklar.get("harici_git").unwrap()
+        {
+            assert_eq!(git.as_deref(), Some("https://github.com/user/repo.git"));
+            assert_eq!(tag.as_deref(), Some("v1"));
+        } else {
+            panic!("harici_git complex olmalı");
+        }
+
+        if let Dependency::Complex {
+            git: _,
+            tag: _,
+            path,
+        } = bagimliliklar.get("yerel_paket").unwrap()
+        {
+            assert_eq!(path.as_deref(), Some("./yerel"));
+        } else {
+            panic!("yerel_paket complex olmalı");
         }
     }
 }
