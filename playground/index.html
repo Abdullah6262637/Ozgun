@@ -331,6 +331,7 @@
                 <option value="islev">Fonksiyon Tanımı</option>
                 <option value="hesap">Matematik & Zaman Kütüphanesi</option>
                 <option value="diziler">Dizi & Sonek İndeksleme</option>
+                <option value="haritalar">Haritalar & Eleman Güncelleme</option>
                 <option value="hata_yonetimi">Türkçe Hata Yönetimi (hata_ise)</option>
                 <option value="asenkron">Zarf-Fiil Asenkron Görevler</option>
             </select>
@@ -466,7 +467,27 @@ yazdır("Görev arka planda başlatıldı...");
 görev tamamlanınca {
     yazdır("Arka plan görevi bitti!");
     yazdır("Görevin döndürdüğü sonuç:", sonuç);
-}`
+}`,
+            haritalar: `// Haritalar (Maps/Objects) ve Eleman Güncelleme:
+haritamız = { "ad": "Tilk", "yas": 3, "sistem": "Göktürk" };
+yazdır("İlk Harita:", haritamız);
+yazdır("Boyut:", boyut(haritamız));
+yazdır("Ad değeri:", haritamız["ad"]);
+
+// Eleman güncelleme (mutation):
+haritamız["yas"] = 4;
+haritamız["sehir"] = "Ötüken";
+
+yazdır("Güncellenmiş Harita:", haritamız);
+yazdır("Yeni Yaş:", haritamız["yas"]);
+yazdır("Yeni Şehir:", haritamız["sehir"]);
+yazdır("Yeni Boyut:", boyut(haritamız));
+
+// Dizi elemanı güncelleme:
+dizi = [10, 20, 30];
+yazdır("İlk Dizi:", dizi);
+dizi[0] = 99;
+yazdır("Güncellenmiş Dizi:", dizi);`
         };
 
         // --- 2. EDITOR INTERACTION & LINE NUMBERS ---
@@ -525,7 +546,7 @@ görev tamamlanınca {
             And: 'And', Or: 'Or',
             LParen: 'LParen', RParen: 'RParen', LBrace: 'LBrace', RBrace: 'RBrace',
             LBracket: 'LBracket', RBracket: 'RBracket',
-            Comma: 'Comma', Semicolon: 'Semicolon',
+            Comma: 'Comma', Semicolon: 'Semicolon', Colon: 'Colon',
             HataIse: 'HataIse', Tamamlaninca: 'Tamamlaninca',
             Number: 'Number', String: 'String', Identifier: 'Identifier'
         };
@@ -541,6 +562,14 @@ görev tamamlanınca {
                 // Skip spaces, tabs, newlines, and apostrophe (')
                 if (/[ \t\n\r']/.test(char)) {
                     idx++;
+                    continue;
+                }
+
+                // Skip comments
+                if (src.startsWith('//', idx)) {
+                    while (idx < src.length && src[idx] !== '\n') {
+                        idx++;
+                    }
                     continue;
                 }
 
@@ -566,6 +595,7 @@ görev tamamlanınca {
                 if (char === ']') { tokens.push({ type: TokenType.RBracket, val: ']' }); idx++; continue; }
                 if (char === ',') { tokens.push({ type: TokenType.Comma, val: ',' }); idx++; continue; }
                 if (char === ';') { tokens.push({ type: TokenType.Semicolon, val: ';' }); idx++; continue; }
+                if (char === ':') { tokens.push({ type: TokenType.Colon, val: ':' }); idx++; continue; }
 
                 // String literals
                 if (char === '"') {
@@ -747,10 +777,16 @@ görev tamamlanınca {
                     return { type: 'For', var: expr.val, start: startExpr, end: endExpr, stepDir, body };
                 }
 
-                if (expr.type === 'Identifier' && this.match(TokenType.Assign)) {
+                if (this.match(TokenType.Assign)) {
                     const valExpr = this.parseExpr();
                     this.expect(TokenType.Semicolon, "Satır sonu ';' bekleniyordu");
-                    return { type: 'VarDecl', name: expr.val, val: valExpr };
+                    if (expr.type === 'Identifier') {
+                        return { type: 'VarDecl', name: expr.val, val: valExpr };
+                    } else if (expr.type === 'Index') {
+                        return { type: 'IndexAssignment', array: expr.array, index: expr.index, val: valExpr };
+                    } else {
+                        throw new Error("HATA: Geçersiz atama hedefi (LHS)");
+                    }
                 }
 
                 this.expect(TokenType.Semicolon, "Satır sonu ';' bekleniyordu");
@@ -871,6 +907,24 @@ görev tamamlanınca {
                     return { type: 'Array', elements };
                 }
 
+                if (this.match(TokenType.LBrace)) {
+                    const pairs = [];
+                    if (this.peek() && this.peek().type !== TokenType.RBrace) {
+                        const k = this.parseExpr();
+                        this.expect(TokenType.Colon, "':' bekleniyordu");
+                        const v = this.parseExpr();
+                        pairs.push({ key: k, val: v });
+                        while (this.match(TokenType.Comma)) {
+                            const nextK = this.parseExpr();
+                            this.expect(TokenType.Colon, "':' bekleniyordu");
+                            const nextV = this.parseExpr();
+                            pairs.push({ key: nextK, val: nextV });
+                        }
+                    }
+                    this.expect(TokenType.RBrace, "'}' bekleniyordu");
+                    return { type: 'Map', pairs };
+                }
+
                 if (tok.type === TokenType.Number) {
                     return { type: 'Literal', val: parseFloat(this.next().val) };
                 }
@@ -937,26 +991,28 @@ görev tamamlanınca {
                 this.stdout = stdoutCallback;
                 this.env = new Env();
                 
+                const isMap = (a) => a !== null && typeof a === 'object' && !Array.isArray(a) && !['Builtin', 'Function', 'Task', 'Hata'].includes(a.type);
+                
                 // Set native builtin print function
                 this.env.bindings.set('yazdır', {
                     type: 'Builtin',
                     call: (args) => {
-                        this.stdout(args.map(a => {
-                            if (a === null) return 'boş';
-                            if (a === true) return 'doğru';
-                            if (a === false) return 'yanlış';
-                            if (a && a.type === 'Hata') return `Hata("${a.val}")`;
-                            if (a && a.type === 'Task') return `Task`;
-                            if (Array.isArray(a)) {
-                                return '[' + a.map(item => {
-                                    if (item === null) return 'boş';
-                                    if (item === true) return 'doğru';
-                                    if (item === false) return 'yanlış';
-                                    if (typeof item === 'string') return `"${item}"`;
-                                    return item.toString();
-                                }).join(', ') + ']';
+                        const formatVal = (item) => {
+                            if (item === null) return 'boş';
+                            if (item === true) return 'doğru';
+                            if (item === false) return 'yanlış';
+                            if (typeof item === 'string') return `"${item}"`;
+                            if (Array.isArray(item)) return '[' + item.map(formatVal).join(', ') + ']';
+                            if (isMap(item)) {
+                                return '{' + Object.entries(item).map(([k, v]) => `${k}: ${formatVal(v)}`).join(', ') + '}';
                             }
-                            return a.toString();
+                            if (item && item.type === 'Hata') return `Hata("${item.val}")`;
+                            if (item && item.type === 'Task') return `Task`;
+                            return item.toString();
+                        };
+                        this.stdout(args.map(a => {
+                            if (typeof a === 'string') return a;
+                            return formatVal(a);
                         }).join(' '));
                         return null;
                     }
@@ -970,8 +1026,9 @@ görev tamamlanınca {
                 };
 
                 addBuiltin('boyut', (args) => {
-                    if (args.length === 1 && Array.isArray(args[0])) {
-                        return args[0].length;
+                    if (args.length === 1) {
+                        if (Array.isArray(args[0])) return args[0].length;
+                        if (isMap(args[0])) return Object.keys(args[0]).length;
                     }
                     return 0;
                 });
@@ -1102,18 +1159,35 @@ görev tamamlanınca {
                         return val;
                     case 'Array':
                         return expr.elements.map(el => this.evalExpr(el, env));
+                    case 'Map':
+                        const obj = {};
+                        for (let pair of expr.pairs) {
+                            const k = this.evalExpr(pair.key, env);
+                            if (k && k.type === 'Hata') return k;
+                            if (typeof k !== 'string') throw new Error("HATA: Harita anahtarı metin (string) olmak zorundadır");
+                            const v = this.evalExpr(pair.val, env);
+                            if (v && v.type === 'Hata') return v;
+                            obj[k] = v;
+                        }
+                        return obj;
                     case 'Index':
                         const arr = this.evalExpr(expr.array, env);
                         if (arr && arr.type === 'Hata') return arr;
                         const idx = this.evalExpr(expr.index, env);
                         if (idx && idx.type === 'Hata') return idx;
+                        
+                        const isMapObj = (a) => a !== null && typeof a === 'object' && !Array.isArray(a) && !['Builtin', 'Function', 'Task', 'Hata'].includes(a.type);
+                        
                         if (Array.isArray(arr)) {
                             if (typeof idx !== 'number') throw new Error("HATA: Dizi indeksi sayı olmalıdır");
                             const i = Math.floor(idx);
                             if (i < 0 || i >= arr.length) throw new Error(`HATA: Dizi sınırları dışında: indeks ${i}, boyut ${arr.length}`);
                             return arr[i];
+                        } else if (isMapObj(arr)) {
+                            if (typeof idx !== 'string') throw new Error("HATA: Harita indeksi metin (string) olmalıdır");
+                            return arr[idx] === undefined ? null : arr[idx];
                         }
-                        throw new Error("HATA: Sadece diziler indekslenebilir");
+                        throw new Error("HATA: Sadece diziler ve haritalar indekslenebilir");
                     case 'HataIse':
                         const baseVal = this.evalExpr(expr.base, env);
                         if (baseVal && baseVal.type === 'Hata') {
@@ -1178,6 +1252,28 @@ görev tamamlanınca {
                     case 'VarDecl':
                         const v = this.evalExpr(stmt.val, env);
                         env.set(stmt.name, v);
+                        return null;
+                    case 'IndexAssignment':
+                        const target = this.evalExpr(stmt.array, env);
+                        if (target && target.type === 'Hata') return target;
+                        const index = this.evalExpr(stmt.index, env);
+                        if (index && index.type === 'Hata') return index;
+                        const value = this.evalExpr(stmt.val, env);
+                        if (value && value.type === 'Hata') return value;
+
+                        const isMapObj2 = (a) => a !== null && typeof a === 'object' && !Array.isArray(a) && !['Builtin', 'Function', 'Task', 'Hata'].includes(a.type);
+
+                        if (Array.isArray(target)) {
+                            if (typeof index !== 'number') throw new Error("HATA: Dizi indeksi sayı olmalıdır");
+                            const i = Math.floor(index);
+                            if (i < 0 || i >= target.length) throw new Error(`HATA: Dizi sınırları dışında güncelleme: indeks ${i}, boyut ${target.length}`);
+                            target[i] = value;
+                        } else if (isMapObj2(target)) {
+                            if (typeof index !== 'string') throw new Error("HATA: Harita indeksi metin (string) olmalıdır");
+                            target[index] = value;
+                        } else {
+                            throw new Error("HATA: Sadece diziler ve haritalar güncellenebilir");
+                        }
                         return null;
                     case 'ExprStmt':
                         this.evalExpr(stmt.expr, env);

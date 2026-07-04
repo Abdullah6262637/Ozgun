@@ -63,6 +63,13 @@ impl Compiler {
                 }
                 self.instructions.push(Instruction::Array(elements.len()));
             }
+            Expr::Map(pairs) => {
+                for (key_expr, val_expr) in pairs {
+                    self.compile_expr(key_expr)?;
+                    self.compile_expr(val_expr)?;
+                }
+                self.instructions.push(Instruction::Map(pairs.len()));
+            }
             Expr::Index(array_expr, index_expr) => {
                 self.compile_expr(array_expr)?;
                 self.compile_expr(index_expr)?;
@@ -93,6 +100,12 @@ impl Compiler {
             Statement::VarDecl(name, value) | Statement::Assignment(name, value) => {
                 self.compile_expr(value)?;
                 self.instructions.push(Instruction::Store(name.clone()));
+            }
+            Statement::IndexAssignment(array, index, value) => {
+                self.compile_expr(array)?;
+                self.compile_expr(index)?;
+                self.compile_expr(value)?;
+                self.instructions.push(Instruction::IndexStore);
             }
             Statement::Expr(expr) => {
                 self.compile_expr(expr)?;

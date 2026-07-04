@@ -46,12 +46,23 @@ fn expr_parser(stmt: impl Parser<Token, Statement, Error = Simple<Token>> + Clon
             .then_ignore(just(Token::RBracket))
             .map(Expr::Array);
 
+        let map_literal = just(Token::LBrace)
+            .ignore_then(
+                expr.clone()
+                    .then_ignore(just(Token::Colon))
+                    .then(expr.clone())
+                    .separated_by(just(Token::Comma)),
+            )
+            .then_ignore(just(Token::RBrace))
+            .map(Expr::Map);
+
         let literal = num_parser()
             .or(string_parser())
             .or(just(Token::Dogru).to(Expr::Literal(Literal::Boolean(true))))
             .or(just(Token::Yanlis).to(Expr::Literal(Literal::Boolean(false))))
             .or(just(Token::Bos).to(Expr::Literal(Literal::Bos)))
-            .or(array_literal);
+            .or(array_literal)
+            .or(map_literal);
 
         let call_or_var = ident_parser()
             .then(
@@ -148,12 +159,18 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
             .repeated()
             .delimited_by(just(Token::LBrace), just(Token::RBrace));
 
-        // x = 5;
-        let assign_or_decl = ident_parser()
+        // x = 5; or dizi[0] = 5;
+        let assign_stmt = expr.clone()
             .then_ignore(just(Token::Assign))
             .then(expr.clone())
             .then_ignore(just(Token::Semicolon))
-            .map(|(name, value)| Statement::VarDecl(name, value));
+            .try_map(|(lhs, rhs), span| {
+                match lhs {
+                    Expr::Identifier(name) => Ok(Statement::VarDecl(name, rhs)),
+                    Expr::Index(array, index) => Ok(Statement::IndexAssignment(*array, *index, rhs)),
+                    _ => Err(Simple::custom(span, "Geçersiz atama hedefi (LHS)")),
+                }
+            });
 
         // koşul ise { ... } değilse { ... }
         let if_stmt = expr.clone()
@@ -221,7 +238,7 @@ fn statement_parser() -> impl Parser<Token, Statement, Error = Simple<Token>> + 
             .then(block.clone())
             .map(|(gorev, body)| Statement::Tamamlaninca(gorev, body));
 
-        assign_or_decl
+        assign_stmt
             .or(if_stmt)
             .or(while_stmt)
             .or(for_stmt)

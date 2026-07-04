@@ -257,6 +257,24 @@ impl VM {
                                             }
                                             print!("]");
                                         }
+                                        Val::Map(map) => {
+                                            let items = map.borrow();
+                                            print!("{{");
+                                            for (idx, (k, v)) in items.iter().enumerate() {
+                                                if idx > 0 {
+                                                    print!(", ");
+                                                }
+                                                print!("{}: ", k);
+                                                match v {
+                                                    Val::Number(n) => print!("{}", n),
+                                                    Val::String(s) => print!("\"{}\"", s),
+                                                    Val::Boolean(b) => print!("{}", if *b { "doğru" } else { "yanlış" }),
+                                                    Val::Bos => print!("boş"),
+                                                    _ => print!("{:?}", v),
+                                                }
+                                            }
+                                            print!("}}");
+                                        }
                                         _ => print!("{:?}", arg),
                                     }
                                 }
@@ -267,10 +285,10 @@ impl VM {
                                     return Err("HATA: boyut() tek bir parametre alır".to_string());
                                 }
                                 let arg = self.stack.pop().ok_or("HATA: Yığın boş (boyut)")?;
-                                if let Val::Array(arr) = arg {
-                                    self.stack.push(Val::Number(arr.borrow().len() as f64));
-                                } else {
-                                    self.stack.push(Val::Number(0.0));
+                                match arg {
+                                    Val::Array(arr) => self.stack.push(Val::Number(arr.borrow().len() as f64)),
+                                    Val::Map(map) => self.stack.push(Val::Number(map.borrow().len() as f64)),
+                                    _ => self.stack.push(Val::Number(0.0)),
                                 }
                             } else if name == "ekle" {
                                 if *arg_count != 2 {
@@ -426,6 +444,19 @@ impl VM {
                     elements.reverse();
                     self.stack.push(Val::Array(Rc::new(RefCell::new(elements))));
                 }
+                Instruction::Map(size) => {
+                    let mut map = HashMap::new();
+                    for _ in 0..*size {
+                        let val = self.stack.pop().ok_or("HATA: Yığın boş (Map val)")?;
+                        let key = self.stack.pop().ok_or("HATA: Yığın boş (Map key)")?;
+                        if let Val::String(s) = key {
+                            map.insert(s, val);
+                        } else {
+                            return Err("HATA: Harita anahtarı metin olmak zorundadır".to_string());
+                        }
+                    }
+                    self.stack.push(Val::Map(Rc::new(RefCell::new(map))));
+                }
                 Instruction::Index => {
                     let index_val = self.stack.pop().ok_or("HATA: Yığın boş (Index idx)")?;
                     let array_val = self.stack.pop().ok_or("HATA: Yığın boş (Index arr)")?;
@@ -444,7 +475,50 @@ impl VM {
                                 _ => return Err("HATA: Dizi indeksi sayı olmalıdır".to_string()),
                             }
                         }
-                        _ => return Err("HATA: Sadece diziler indekslenebilir".to_string()),
+                        Val::Map(map) => {
+                            match index_val {
+                                Val::String(s) => {
+                                    let items = map.borrow();
+                                    if let Some(v) = items.get(&s) {
+                                        self.stack.push(v.clone());
+                                    } else {
+                                        self.stack.push(Val::Bos);
+                                    }
+                                }
+                                _ => return Err("HATA: Harita indeksi metin olmak zorundadır".to_string()),
+                            }
+                        }
+                        _ => return Err("HATA: Sadece diziler ve haritalar indekslenebilir".to_string()),
+                    }
+                }
+                Instruction::IndexStore => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (IndexStore val)")?;
+                    let index_val = self.stack.pop().ok_or("HATA: Yığın boş (IndexStore idx)")?;
+                    let target_val = self.stack.pop().ok_or("HATA: Yığın boş (IndexStore target)")?;
+                    match target_val {
+                        Val::Array(arr) => {
+                            match index_val {
+                                Val::Number(n) => {
+                                    let idx = n as usize;
+                                    let mut items = arr.borrow_mut();
+                                    if idx < items.len() {
+                                        items[idx] = val;
+                                    } else {
+                                        return Err(format!("HATA: Dizi sınırları dışında güncelleme: indeks {}, boyut {}", idx, items.len()));
+                                    }
+                                }
+                                _ => return Err("HATA: Dizi indeksi sayı olmalıdır".to_string()),
+                            }
+                        }
+                        Val::Map(map) => {
+                            match index_val {
+                                Val::String(s) => {
+                                    map.borrow_mut().insert(s, val);
+                                }
+                                _ => return Err("HATA: Harita indeksi metin olmak zorundadır".to_string()),
+                            }
+                        }
+                        _ => return Err("HATA: Sadece diziler ve haritalar güncellenebilir".to_string()),
                     }
                 }
                 Instruction::JumpIfError(dest) => {
@@ -492,10 +566,10 @@ impl VM {
                                             Val::Bos
                                         } else if name == "boyut" {
                                             if task.args.len() == 1 {
-                                                if let Val::Array(arr) = &task.args[0] {
-                                                    Val::Number(arr.borrow().len() as f64)
-                                                } else {
-                                                    Val::Number(0.0)
+                                                match &task.args[0] {
+                                                    Val::Array(arr) => Val::Number(arr.borrow().len() as f64),
+                                                    Val::Map(map) => Val::Number(map.borrow().len() as f64),
+                                                    _ => Val::Number(0.0)
                                                 }
                                             } else {
                                                 Val::Number(0.0)

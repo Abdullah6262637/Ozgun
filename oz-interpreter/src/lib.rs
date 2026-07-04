@@ -15,6 +15,7 @@ pub enum Val {
     },
     Builtin(Rc<dyn Fn(Vec<Val>) -> Val>),
     Array(Rc<RefCell<Vec<Val>>>),
+    Map(Rc<RefCell<HashMap<String, Val>>>),
     Hata(String),
     Task(Rc<RefCell<TaskState>>),
 }
@@ -47,6 +48,17 @@ impl std::fmt::Debug for Val {
                 }
                 write!(f, "]")
             }
+            Val::Map(map) => {
+                let items = map.borrow();
+                write!(f, "{{")?;
+                for (i, (key, val)) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:?}: {:?}", key, val)?;
+                }
+                write!(f, "}}")
+            }
             Val::Hata(msg) => write!(f, "Hata({:?})", msg),
             Val::Task(_) => write!(f, "Task"),
         }
@@ -61,6 +73,7 @@ impl PartialEq for Val {
             (Val::Boolean(a), Val::Boolean(b)) => a == b,
             (Val::Bos, Val::Bos) => true,
             (Val::Array(a), Val::Array(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Val::Map(a), Val::Map(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Val::Hata(a), Val::Hata(b)) => a == b,
             (Val::Task(a), Val::Task(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -144,13 +157,15 @@ pub fn create_global_env() -> Env {
             Val::Bos
         })),
     );
-    // Built-in function "boyut" (returns length of array)
+    // Built-in function "boyut" (returns length of array or map)
     env.set(
         "boyut".to_string(),
         Val::Builtin(Rc::new(|args| {
             if args.len() == 1 {
-                if let Val::Array(arr) = &args[0] {
-                    return Val::Number(arr.borrow().len() as f64);
+                match &args[0] {
+                    Val::Array(arr) => return Val::Number(arr.borrow().len() as f64),
+                    Val::Map(map) => return Val::Number(map.borrow().len() as f64),
+                    _ => {}
                 }
             }
             Val::Number(0.0)
@@ -421,6 +436,20 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Val, String> {
             }
             Ok(Val::Array(Rc::new(RefCell::new(vals))))
         }
+        Expr::Map(pairs) => {
+            let mut map = HashMap::new();
+            for (key_expr, val_expr) in pairs {
+                let key_val = eval_expr(key_expr, env)?;
+                let val_val = eval_expr(val_expr, env)?;
+                match key_val {
+                    Val::String(s) => {
+                        map.insert(s, val_val);
+                    }
+                    _ => return Err("HATA: Harita anahtarı metin (string) olmak zorundadır".to_string()),
+                }
+            }
+            Ok(Val::Map(Rc::new(RefCell::new(map))))
+        }
         Expr::Index(array_expr, index_expr) => {
             let arr_val = eval_expr(array_expr, env)?;
             let idx_val = eval_expr(index_expr, env)?;
@@ -439,7 +468,20 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Val, String> {
                         _ => Err("HATA: Dizi indeksi sayı olmak zorundadır".to_string()),
                     }
                 }
-                _ => Err("HATA: Sadece diziler indekslenebilir".to_string()),
+                Val::Map(map) => {
+                    match idx_val {
+                        Val::String(s) => {
+                            let items = map.borrow();
+                            if let Some(val) = items.get(&s) {
+                                Ok(val.clone())
+                            } else {
+                                Ok(Val::Bos)
+                            }
+                        }
+                        _ => Err("HATA: Harita indeksi metin (string) olmak zorundadır".to_string()),
+                    }
+                }
+                _ => Err("HATA: Sadece diziler ve haritalar indekslenebilir".to_string()),
             }
         }
         Expr::HataIse(base, body) => {
@@ -467,6 +509,39 @@ pub fn eval_stmt(stmt: &Statement, env: &Env) -> Result<Option<Val>, String> {
             let val = eval_expr(value, env)?;
             env.set(name.clone(), val);
             Ok(None)
+        }
+        Statement::IndexAssignment(array_expr, index_expr, value_expr) => {
+            let target_val = eval_expr(array_expr, env)?;
+            let index_val = eval_expr(index_expr, env)?;
+            let value_val = eval_expr(value_expr, env)?;
+
+            match target_val {
+                Val::Array(arr) => {
+                    match index_val {
+                        Val::Number(n) => {
+                            let idx = n as usize;
+                            let mut items = arr.borrow_mut();
+                            if idx < items.len() {
+                                items[idx] = value_val;
+                                Ok(None)
+                            } else {
+                                Err(format!("HATA: Dizi sınırları dışında güncelleme: indeks {}, boyut {}", idx, items.len()))
+                            }
+                        }
+                        _ => Err("HATA: Dizi indeksi sayı olmak zorundadır".to_string()),
+                    }
+                }
+                Val::Map(map) => {
+                    match index_val {
+                        Val::String(s) => {
+                            map.borrow_mut().insert(s, value_val);
+                            Ok(None)
+                        }
+                        _ => Err("HATA: Harita indeksi metin (string) olmak zorundadır".to_string()),
+                    }
+                }
+                _ => Err("HATA: Sadece diziler ve haritalar güncellenebilir".to_string()),
+            }
         }
         Statement::If(cond, then_block, else_block) => {
             let condition = eval_expr(cond, env)?;
@@ -814,6 +889,45 @@ mod tests {
         assert_eq!(env.get("mutlak_res"), Some(Val::Number(42.0)));
         assert!(env.get("simdi_res").is_some());
         assert_eq!(env.get("hata_res"), Some(Val::Number(999.0)));
+    }
+
+    #[test]
+    fn test_haritalar_ve_mutasyon() {
+        let src = r#"
+            işlev test_harita() {
+                haritamız = { "ad": "Tilk", "yas": 3 };
+                boyut_ilk = boyut(haritamız);
+                ad_deger = haritamız["ad"];
+                haritamız["yas"] = 4;
+                haritamız["sehir"] = "Bozkır";
+                
+                yas_yeni = haritamız["yas"];
+                sehir_yeni = haritamız["sehir"];
+                boyut_son = boyut(haritamız);
+                
+                dizi = [10, 20, 30];
+                dizi[0] = 99;
+                dizi_ilk = dizi[0];
+                
+                döndür [boyut_ilk, ad_deger, yas_yeni, sehir_yeni, boyut_son, dizi_ilk];
+            }
+            res = test_harita();
+            res_boyut_ilk = res[0];
+            res_ad = res[1];
+            res_yas_yeni = res[2];
+            res_sehir_yeni = res[3];
+            res_boyut_son = res[4];
+            res_dizi_ilk = res[5];
+        "#;
+        let res = run_src(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, env) = res.unwrap();
+        assert_eq!(env.get("res_boyut_ilk"), Some(Val::Number(2.0)));
+        assert_eq!(env.get("res_ad"), Some(Val::String("Tilk".to_string())));
+        assert_eq!(env.get("res_yas_yeni"), Some(Val::Number(4.0)));
+        assert_eq!(env.get("res_sehir_yeni"), Some(Val::String("Bozkır".to_string())));
+        assert_eq!(env.get("res_boyut_son"), Some(Val::Number(3.0)));
+        assert_eq!(env.get("res_dizi_ilk"), Some(Val::Number(99.0)));
     }
 }
 

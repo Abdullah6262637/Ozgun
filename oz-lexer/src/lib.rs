@@ -91,6 +91,9 @@ pub enum Token {
     #[token(";")]
     Semicolon,
 
+    #[token(":")]
+    Colon,
+
     #[token("[")]
     LBracket,
 

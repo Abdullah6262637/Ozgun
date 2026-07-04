@@ -214,4 +214,43 @@ mod tests {
         assert!(vm.get_global("simdi_res").is_some());
         assert_eq!(vm.get_global("hata_res"), Some(Val::Number(999.0)));
     }
+
+    #[test]
+    fn test_haritalar_ve_mutasyon() {
+        let src = r#"
+            işlev test_harita() {
+                haritamız = { "ad": "Tilk", "yas": 3 };
+                boyut_ilk = boyut(haritamız);
+                ad_deger = haritamız["ad"];
+                haritamız["yas"] = 4;
+                haritamız["sehir"] = "Bozkır";
+                
+                yas_yeni = haritamız["yas"];
+                sehir_yeni = haritamız["sehir"];
+                boyut_son = boyut(haritamız);
+                
+                dizi = [10, 20, 30];
+                dizi[0] = 99;
+                dizi_ilk = dizi[0];
+                
+                döndür [boyut_ilk, ad_deger, yas_yeni, sehir_yeni, boyut_son, dizi_ilk];
+            }
+            res = test_harita();
+            res_boyut_ilk = res[0];
+            res_ad = res[1];
+            res_yas_yeni = res[2];
+            res_sehir_yeni = res[3];
+            res_boyut_son = res[4];
+            res_dizi_ilk = res[5];
+        "#;
+        let res = run_bytecode(src);
+        assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+        let (_, vm) = res.unwrap();
+        assert_eq!(vm.get_global("res_boyut_ilk"), Some(Val::Number(2.0)));
+        assert_eq!(vm.get_global("res_ad"), Some(Val::String("Tilk".to_string())));
+        assert_eq!(vm.get_global("res_yas_yeni"), Some(Val::Number(4.0)));
+        assert_eq!(vm.get_global("res_sehir_yeni"), Some(Val::String("Bozkır".to_string())));
+        assert_eq!(vm.get_global("res_boyut_son"), Some(Val::Number(3.0)));
+        assert_eq!(vm.get_global("res_dizi_ilk"), Some(Val::Number(99.0)));
+    }
 }

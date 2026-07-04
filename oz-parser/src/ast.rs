@@ -30,6 +30,7 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Call(String, Vec<Expr>),
     Array(Vec<Expr>),
+    Map(Vec<(Expr, Expr)>),
     Index(Box<Expr>, Box<Expr>),
     HataIse(Box<Expr>, Vec<Statement>),
 }
@@ -44,6 +45,7 @@ pub enum StepDir {
 pub enum Statement {
     VarDecl(String, Expr),
     Assignment(String, Expr),
+    IndexAssignment(Expr, Expr, Expr),
     If(Expr, Vec<Statement>, Option<Vec<Statement>>),
     While(Expr, Vec<Statement>),
     For {

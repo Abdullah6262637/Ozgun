@@ -15,6 +15,7 @@ pub enum Val {
     },
     Builtin(String),
     Array(Rc<RefCell<Vec<Val>>>),
+    Map(Rc<RefCell<std::collections::HashMap<String, Val>>>),
     Hata(String),
     Task(Rc<RefCell<TaskState>>),
 }
@@ -52,6 +53,8 @@ pub enum Instruction {
     Call(usize),
     Return,
     Array(usize),
+    Map(usize),
     Index,
+    IndexStore,
     AwaitTask,
 }
