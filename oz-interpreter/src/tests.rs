@@ -418,11 +418,23 @@ fn test_dosya_sonuc_hata_yonetimi() {
     let res = run_src(src);
     assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
     let (_, env) = res.unwrap();
-    assert_eq!(env.get("hata_durumu"), Some(Val::String("hata".to_string())));
-    assert_eq!(env.get("hata_mesaji"), Some(Val::String("Okuma hatası".to_string())));
-    assert_eq!(env.get("yazma_durumu"), Some(Val::String("basarili".to_string())));
+    assert_eq!(
+        env.get("hata_durumu"),
+        Some(Val::String("hata".to_string()))
+    );
+    assert_eq!(
+        env.get("hata_mesaji"),
+        Some(Val::String("Okuma hatası".to_string()))
+    );
+    assert_eq!(
+        env.get("yazma_durumu"),
+        Some(Val::String("basarili".to_string()))
+    );
     assert_eq!(env.get("yazma_degeri"), Some(Val::Bos));
-    assert_eq!(env.get("silme_durumu"), Some(Val::String("basarili".to_string())));
+    assert_eq!(
+        env.get("silme_durumu"),
+        Some(Val::String("basarili".to_string()))
+    );
 }
 
 #[test]
@@ -450,4 +462,3 @@ fn test_kanallar_ve_eszamanlilik() {
     assert_eq!(env.get("deger_ikinci"), Some(Val::Number(99.0)));
     assert_eq!(env.get("deger_ucuncu"), Some(Val::Bos));
 }
-

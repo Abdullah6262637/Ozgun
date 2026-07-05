@@ -29,9 +29,11 @@ impl TypeChecker {
         let resolved = self.resolve(ty);
         match resolved {
             Type::Var(id) => var_id == id,
-            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Channel(inner) | Type::Option(inner) => {
-                self.occurs_in(var_id, &inner)
-            }
+            Type::Array(inner)
+            | Type::Map(inner)
+            | Type::Task(inner)
+            | Type::Channel(inner)
+            | Type::Option(inner) => self.occurs_in(var_id, &inner),
             Type::Function { params, ret } => {
                 params.iter().any(|p| self.occurs_in(var_id, p)) || self.occurs_in(var_id, &ret)
             }
@@ -110,7 +112,11 @@ impl TypeChecker {
                     vars.insert(*id);
                 }
             }
-            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Channel(inner) | Type::Option(inner) => {
+            Type::Array(inner)
+            | Type::Map(inner)
+            | Type::Task(inner)
+            | Type::Channel(inner)
+            | Type::Option(inner) => {
                 self.collect_free_vars(inner, vars);
             }
             Type::Function { params, ret } => {

@@ -57,7 +57,11 @@ fn test_generics_ve_tipler() {
         }
     "#;
     let res = parse_helper(src);
-    assert!(res.is_ok(), "Jenerik ve tip belirtimli fonksiyon ayrıştırma hatası: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "Jenerik ve tip belirtimli fonksiyon ayrıştırma hatası: {:?}",
+        res
+    );
 }
 
 #[test]
@@ -68,7 +72,11 @@ fn test_null_safety() {
         }
     "#;
     let res = parse_helper(src);
-    assert!(res.is_ok(), "Nullable tip belirtimli fonksiyon ayrıştırma hatası: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "Nullable tip belirtimli fonksiyon ayrıştırma hatası: {:?}",
+        res
+    );
     let ast = res.unwrap();
     let check_res = typechecker::check_program(&ast);
     assert!(check_res.is_ok(), "Tip denetimi hatası: {:?}", check_res);
@@ -83,7 +91,11 @@ fn test_turkce_ekler() {
         ad_deger2 = ogrenci'de ad;
     "#;
     let res = parse_helper(src);
-    assert!(res.is_ok(), "Türkçe durum ekleri ayrıştırma hatası: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "Türkçe durum ekleri ayrıştırma hatası: {:?}",
+        res
+    );
     let ast = res.unwrap();
     assert_eq!(ast.len(), 4);
 }

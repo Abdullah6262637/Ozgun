@@ -444,7 +444,14 @@ TilkVal not_val(TilkVal v) {
 
         // Generate C function bodies for all collected declarations
         for decl in &fn_decls {
-            if let Statement::FnDecl { name, generics: _, params, return_type: _, body } = decl {
+            if let Statement::FnDecl {
+                name,
+                generics: _,
+                params,
+                return_type: _,
+                body,
+            } = decl
+            {
                 let mut fn_code = format!("\nTilkVal {}(", sanitize_identifier(name));
                 for (i, (p_name, _)) in params.iter().enumerate() {
                     if i > 0 {

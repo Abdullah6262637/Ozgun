@@ -44,7 +44,10 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 BinaryOp::Add => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a + b)),
                     (Val::String(a), Val::String(b)) => Ok(Val::String(format!("{}{}", a, b))),
-                    _ => Err("HATA: Toplama işlemi sayılar veya metinler arasında yapılabilir".to_string()),
+                    _ => Err(
+                        "HATA: Toplama işlemi sayılar veya metinler arasında yapılabilir"
+                            .to_string(),
+                    ),
                 },
                 BinaryOp::Sub => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a - b)),
@@ -88,11 +91,17 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 },
                 BinaryOp::And => match (left, right) {
                     (Val::Boolean(a), Val::Boolean(b)) => Ok(Val::Boolean(a && b)),
-                    _ => Err("HATA: Mantıksal VE işlemi sadece mantıksal değerlerle yapılabilir".to_string()),
+                    _ => Err(
+                        "HATA: Mantıksal VE işlemi sadece mantıksal değerlerle yapılabilir"
+                            .to_string(),
+                    ),
                 },
                 BinaryOp::Or => match (left, right) {
                     (Val::Boolean(a), Val::Boolean(b)) => Ok(Val::Boolean(a || b)),
-                    _ => Err("HATA: Mantıksal VEYA işlemi sadece mantıksal değerlerle yapılabilir".to_string()),
+                    _ => Err(
+                        "HATA: Mantıksal VEYA işlemi sadece mantıksal değerlerle yapılabilir"
+                            .to_string(),
+                    ),
                 },
             }
         }
@@ -126,7 +135,10 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     };
 
                     if env.is_loading(&canonical_path) {
-                        return Err(format!("HATA: Döngüsel bağımlılık tespit edildi: {}", path_str));
+                        return Err(format!(
+                            "HATA: Döngüsel bağımlılık tespit edildi: {}",
+                            path_str
+                        ));
                     }
                     if env.is_loaded(&canonical_path) {
                         return Ok(Val::Bos);
@@ -155,7 +167,12 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     let _ = eval_program(&ast, &module_env)?;
 
                     let has_namespace_prefix = if path_str.starts_with("std::") {
-                        Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                        Some(
+                            path_str
+                                .split("::")
+                                .map(|s| s.to_string())
+                                .collect::<Vec<String>>(),
+                        )
                     } else {
                         None
                     };
@@ -163,10 +180,29 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     if let Some(ref p) = has_namespace_prefix {
                         let prefix_str = p.join("::");
                         for (k, v) in module_env.get_bindings().into_iter() {
-                            let is_builtin = match k.as_str() {
-                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
-                                _ => false,
-                            };
+                            let is_builtin = matches!(
+                                k.as_str(),
+                                "yazdır"
+                                    | "boyut"
+                                    | "ekle"
+                                    | "hata_fırlat"
+                                    | "hata_firlat"
+                                    | "dosya_oku"
+                                    | "dosya_yaz"
+                                    | "dosya_sil"
+                                    | "arkaplanda_çalıştır"
+                                    | "arkaplanda_calistir"
+                                    | "kök"
+                                    | "karekok"
+                                    | "üs"
+                                    | "ust"
+                                    | "mutlak"
+                                    | "şimdi"
+                                    | "simdi"
+                                    | "uyku"
+                                    | "dahil_et"
+                                    | "kanal"
+                            );
                             if is_builtin {
                                 continue;
                             }
@@ -178,10 +214,29 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                         }
                     } else {
                         for (k, v) in module_env.get_bindings().into_iter() {
-                            let is_builtin = match k.as_str() {
-                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
-                                _ => false,
-                            };
+                            let is_builtin = matches!(
+                                k.as_str(),
+                                "yazdır"
+                                    | "boyut"
+                                    | "ekle"
+                                    | "hata_fırlat"
+                                    | "hata_firlat"
+                                    | "dosya_oku"
+                                    | "dosya_yaz"
+                                    | "dosya_sil"
+                                    | "arkaplanda_çalıştır"
+                                    | "arkaplanda_calistir"
+                                    | "kök"
+                                    | "karekok"
+                                    | "üs"
+                                    | "ust"
+                                    | "mutlak"
+                                    | "şimdi"
+                                    | "simdi"
+                                    | "uyku"
+                                    | "dahil_et"
+                                    | "kanal"
+                            );
                             if is_builtin {
                                 continue;
                             }
@@ -207,10 +262,28 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
             let func = env
                 .get(&lookup_name)
                 .or_else(|| {
-                    let is_builtin = match name.as_str() {
-                        "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
-                        _ => false,
-                    };
+                    let is_builtin = matches!(
+                        name.as_str(),
+                        "yazdır"
+                            | "boyut"
+                            | "ekle"
+                            | "hata_fırlat"
+                            | "hata_firlat"
+                            | "dosya_oku"
+                            | "dosya_yaz"
+                            | "dosya_sil"
+                            | "arkaplanda_çalıştır"
+                            | "arkaplanda_calistir"
+                            | "kök"
+                            | "karekok"
+                            | "üs"
+                            | "ust"
+                            | "mutlak"
+                            | "şimdi"
+                            | "simdi"
+                            | "uyku"
+                            | "kanal"
+                    );
                     if is_builtin {
                         env.get(name)
                     } else {
@@ -227,7 +300,8 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 }
             }
 
-            let is_calistir = prefix.is_none() && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir");
+            let is_calistir = prefix.is_none()
+                && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir");
             if is_calistir && !evaluated_args.is_empty() {
                 let func_to_run = evaluated_args[0].clone();
                 let task_args = evaluated_args[1..].to_vec();
@@ -524,8 +598,15 @@ pub fn eval_stmt(stmt: &Spanned<Statement>, env: &Env) -> Result<Option<Val>, St
             }
             Ok(None)
         }
-        Statement::FnDecl { name, generics: _, params, return_type: _, body } => {
-            let param_names: Vec<String> = params.iter().map(|(p_name, _)| p_name.clone()).collect();
+        Statement::FnDecl {
+            name,
+            generics: _,
+            params,
+            return_type: _,
+            body,
+        } => {
+            let param_names: Vec<String> =
+                params.iter().map(|(p_name, _)| p_name.clone()).collect();
             env.set(
                 name.clone(),
                 Val::Function {

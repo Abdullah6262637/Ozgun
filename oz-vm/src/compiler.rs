@@ -37,17 +37,51 @@ impl Compiler {
             }
         }
         let is_builtin = match name {
-            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
+            "yazdır"
+            | "boyut"
+            | "ekle"
+            | "hata_fırlat"
+            | "dosya_oku"
+            | "dosya_yaz"
+            | "dosya_sil"
+            | "arkaplanda_çalıştır"
+            | "arkaplanda_calistir"
+            | "kök"
+            | "karekok"
+            | "üs"
+            | "ust"
+            | "mutlak"
+            | "şimdi"
+            | "simdi"
+            | "uyku"
+            | "kanal" => true,
             _ => {
                 let name_without_prefix = if name.contains("::") {
                     name.split("::").last().unwrap_or(name)
                 } else {
                     name
                 };
-                match name_without_prefix {
-                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
-                    _ => false,
-                }
+                matches!(
+                    name_without_prefix,
+                    "yazdır"
+                        | "boyut"
+                        | "ekle"
+                        | "hata_fırlat"
+                        | "dosya_oku"
+                        | "dosya_yaz"
+                        | "dosya_sil"
+                        | "arkaplanda_çalıştır"
+                        | "arkaplanda_calistir"
+                        | "kök"
+                        | "karekok"
+                        | "üs"
+                        | "ust"
+                        | "mutlak"
+                        | "şimdi"
+                        | "simdi"
+                        | "uyku"
+                        | "kanal"
+                )
             }
         };
         let resolved_name = if is_builtin {
@@ -83,10 +117,27 @@ impl Compiler {
                 .insert(name.to_string(), slot);
             VarRef::Local(slot)
         } else {
-            let is_builtin = match name {
-                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
-                _ => false,
-            };
+            let is_builtin = matches!(
+                name,
+                "yazdır"
+                    | "boyut"
+                    | "ekle"
+                    | "hata_fırlat"
+                    | "dosya_oku"
+                    | "dosya_yaz"
+                    | "dosya_sil"
+                    | "arkaplanda_çalıştır"
+                    | "arkaplanda_calistir"
+                    | "kök"
+                    | "karekok"
+                    | "üs"
+                    | "ust"
+                    | "mutlak"
+                    | "şimdi"
+                    | "simdi"
+                    | "uyku"
+                    | "kanal"
+            );
             let resolved_name = if let Some(ref ns) = self.current_namespace {
                 if !name.contains("::") && !is_builtin {
                     format!("{}::{}", ns, name)
@@ -242,7 +293,12 @@ impl Compiler {
                             .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
 
                         let has_namespace_prefix = if path_str.starts_with("std::") {
-                            Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                            Some(
+                                path_str
+                                    .split("::")
+                                    .map(|s| s.to_string())
+                                    .collect::<Vec<String>>(),
+                            )
                         } else {
                             None
                         };
@@ -269,7 +325,7 @@ impl Compiler {
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
-                
+
                 let lookup_name = if let Some(p) = prefix {
                     format!("{}::{}", p.join("::"), name)
                 } else {
@@ -282,7 +338,9 @@ impl Compiler {
                 } else {
                     match self.get_variable(&lookup_name) {
                         VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
-                        VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                        VarRef::Global(slot) => {
+                            self.instructions.push(Instruction::LoadGlobal(slot))
+                        }
                     }
                     self.instructions.push(Instruction::Call(args.len()));
                 }
@@ -319,13 +377,17 @@ impl Compiler {
                         self.instructions.push(Instruction::LoadLocal(*slot));
                     }
                     VarRef::Global(slot) => {
-                        self.instructions.push(Instruction::StoreGlobal(slot.clone()));
-                        self.instructions.push(Instruction::LoadGlobal(slot.clone()));
+                        self.instructions
+                            .push(Instruction::StoreGlobal(slot.clone()));
+                        self.instructions
+                            .push(Instruction::LoadGlobal(slot.clone()));
                     }
                 }
                 match &err_var_ascii {
                     VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
-                    VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
+                    VarRef::Global(slot) => self
+                        .instructions
+                        .push(Instruction::StoreGlobal(slot.clone())),
                 }
                 for stmt in body {
                     self.compile_stmt(stmt)?;
@@ -466,7 +528,13 @@ impl Compiler {
                 let loop_end = self.instructions.len();
                 self.instructions[jump_end_idx] = Instruction::JumpIfFalse(loop_end);
             }
-            Statement::FnDecl { name, generics: _, params, return_type: _, body } => {
+            Statement::FnDecl {
+                name,
+                generics: _,
+                params,
+                return_type: _,
+                body,
+            } => {
                 let jump_over_idx = self.instructions.len();
                 self.instructions.push(Instruction::Jump(0));
 

@@ -461,11 +461,23 @@ fn test_dosya_sonuc_hata_yonetimi() {
     let res = run_bytecode(src);
     assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
     let (_, vm) = res.unwrap();
-    assert_eq!(vm.get_global("hata_durumu"), Some(Val::String("hata".to_string())));
-    assert_eq!(vm.get_global("hata_mesaji"), Some(Val::String("Okuma hatası".to_string())));
-    assert_eq!(vm.get_global("yazma_durumu"), Some(Val::String("basarili".to_string())));
+    assert_eq!(
+        vm.get_global("hata_durumu"),
+        Some(Val::String("hata".to_string()))
+    );
+    assert_eq!(
+        vm.get_global("hata_mesaji"),
+        Some(Val::String("Okuma hatası".to_string()))
+    );
+    assert_eq!(
+        vm.get_global("yazma_durumu"),
+        Some(Val::String("basarili".to_string()))
+    );
     assert_eq!(vm.get_global("yazma_degeri"), Some(Val::Bos));
-    assert_eq!(vm.get_global("silme_durumu"), Some(Val::String("basarili".to_string())));
+    assert_eq!(
+        vm.get_global("silme_durumu"),
+        Some(Val::String("basarili".to_string()))
+    );
 }
 
 #[test]
@@ -493,4 +505,3 @@ fn test_kanallar_ve_eszamanlilik() {
     assert_eq!(vm.get_global("deger_ikinci"), Some(Val::Number(99.0)));
     assert_eq!(vm.get_global("deger_ucuncu"), Some(Val::Bos));
 }
-

@@ -117,13 +117,13 @@ fn expr_parser(
                     ]))
                     .then_ignore(suffix_parser(&["elemanı", "elemani", "değeri", "degeri"])),
             )
-            .or(
-                suffix_parser(&["in", "ın", "un", "ün", "nin", "nın", "nun", "nün", "de", "da", "te", "ta", "yi", "yı", "yu", "yü"]).ignore_then(
-                    ident_parser().map_with_span(|name, span| {
-                        Spanned::new(Expr::Literal(Literal::String(name)), span)
-                    }),
-                ),
-            );
+            .or(suffix_parser(&[
+                "in", "ın", "un", "ün", "nin", "nın", "nun", "nün", "de", "da", "te", "ta", "yi",
+                "yı", "yu", "yü",
+            ])
+            .ignore_then(ident_parser().map_with_span(|name, span| {
+                Spanned::new(Expr::Literal(Literal::String(name)), span)
+            })));
 
         let indexed_atom = atom.then(index_suffix.repeated()).foldl(|array, index| {
             let span = array.span.start..index.span.end;
@@ -146,7 +146,8 @@ fn expr_parser(
             .to(BinaryOp::Mul)
             .or(just(Token::Div).to(BinaryOp::Div))
             .or(just(Token::Mod).to(BinaryOp::Mod));
-        let factor = unary.clone()
+        let factor = unary
+            .clone()
             .then(op_mul.then(unary).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
@@ -157,7 +158,8 @@ fn expr_parser(
         let op_add = just(Token::Plus)
             .to(BinaryOp::Add)
             .or(just(Token::Minus).to(BinaryOp::Sub));
-        let term = factor.clone()
+        let term = factor
+            .clone()
             .then(op_add.then(factor).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
@@ -173,7 +175,8 @@ fn expr_parser(
             .or(just(Token::Lt).to(BinaryOp::Lt))
             .or(just(Token::Gt).to(BinaryOp::Gt));
         let comparison =
-            term.clone().then(op_comp.then(term).repeated())
+            term.clone()
+                .then(op_comp.then(term).repeated())
                 .foldl(|lhs, (op, rhs)| {
                     let span = lhs.span.start..rhs.span.end;
                     Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
@@ -183,7 +186,8 @@ fn expr_parser(
         let op_logical = just(Token::And)
             .to(BinaryOp::And)
             .or(just(Token::Or).to(BinaryOp::Or));
-        let base_expr = comparison.clone()
+        let base_expr = comparison
+            .clone()
             .then(op_logical.then(comparison).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
@@ -224,7 +228,10 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
             .try_map(|(lhs, rhs), span| match lhs.node {
                 Expr::Identifier(prefix, name) => {
                     if prefix.is_some() {
-                        Err(Simple::custom(span, "Modül önekli tanımlayıcılara doğrudan atama yapılamaz"))
+                        Err(Simple::custom(
+                            span,
+                            "Modül önekli tanımlayıcılara doğrudan atama yapılamaz",
+                        ))
                     } else {
                         Ok(Spanned::new(Statement::VarDecl(name, rhs), span))
                     }
@@ -306,8 +313,7 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
             .or_not()
             .map(|opt| opt.unwrap_or_default());
 
-        let param_parser = ident_parser()
-            .then(type_annot.clone().or_not());
+        let param_parser = ident_parser().then(type_annot.clone().or_not());
 
         let fn_decl = just(Token::Islev)
             .ignore_then(ident_parser())
@@ -319,13 +325,15 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
             )
             .then(type_annot.or_not())
             .then(block.clone())
-            .map(|((((name, generics), params), return_type), body)| Statement::FnDecl {
-                name,
-                generics,
-                params,
-                return_type,
-                body,
-            })
+            .map(
+                |((((name, generics), params), return_type), body)| Statement::FnDecl {
+                    name,
+                    generics,
+                    params,
+                    return_type,
+                    body,
+                },
+            )
             .map_with_span(Spanned::new);
 
         // döndür x;

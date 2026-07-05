@@ -54,7 +54,10 @@ impl TypeChecker {
                     self.recorded_types.insert(lookup_name.clone(), resolved);
                     Ok(instantiated)
                 } else {
-                    Err(format!("Tip Hatası: Tanımlanamayan değişken '{}'", lookup_name))
+                    Err(format!(
+                        "Tip Hatası: Tanımlanamayan değişken '{}'",
+                        lookup_name
+                    ))
                 }
             }
             Expr::Unary(op, operand) => {
@@ -163,7 +166,12 @@ impl TypeChecker {
                             .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
 
                         let has_namespace_prefix = if path_str.starts_with("std::") {
-                            Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                            Some(
+                                path_str
+                                    .split("::")
+                                    .map(|s| s.to_string())
+                                    .collect::<Vec<String>>(),
+                            )
                         } else {
                             None
                         };
@@ -176,10 +184,29 @@ impl TypeChecker {
                         let mut current_env = Some(Box::new(module_env));
                         while let Some(curr) = current_env {
                             for (name, scheme) in curr.bindings.clone() {
-                                let is_builtin = match name.as_str() {
-                                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
-                                    _ => false,
-                                };
+                                let is_builtin = matches!(
+                                    name.as_str(),
+                                    "yazdır"
+                                        | "boyut"
+                                        | "ekle"
+                                        | "hata_fırlat"
+                                        | "hata_firlat"
+                                        | "dosya_oku"
+                                        | "dosya_yaz"
+                                        | "dosya_sil"
+                                        | "arkaplanda_çalıştır"
+                                        | "arkaplanda_calistir"
+                                        | "kök"
+                                        | "karekok"
+                                        | "üs"
+                                        | "ust"
+                                        | "mutlak"
+                                        | "şimdi"
+                                        | "simdi"
+                                        | "uyku"
+                                        | "dahil_et"
+                                        | "kanal"
+                                );
                                 if is_builtin {
                                     continue;
                                 }
@@ -206,7 +233,9 @@ impl TypeChecker {
                     }
                 }
 
-                if prefix.is_none() && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir") {
+                if prefix.is_none()
+                    && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir")
+                {
                     if args.is_empty() {
                         return Err(
                             "Tip Hatası: arkaplanda_çalıştır en az bir argüman almalıdır"
@@ -237,10 +266,29 @@ impl TypeChecker {
                     .get(&lookup_name)
                     .or_else(|| {
                         // fallback to name without prefix if name starts with standard lib prefix but was parsed without it? No, if name is a builtin
-                        let is_builtin = match name.as_str() {
-                            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
-                            _ => false,
-                        };
+                        let is_builtin = matches!(
+                            name.as_str(),
+                            "yazdır"
+                                | "boyut"
+                                | "ekle"
+                                | "hata_fırlat"
+                                | "hata_firlat"
+                                | "dosya_oku"
+                                | "dosya_yaz"
+                                | "dosya_sil"
+                                | "arkaplanda_çalıştır"
+                                | "arkaplanda_calistir"
+                                | "kök"
+                                | "karekok"
+                                | "üs"
+                                | "ust"
+                                | "mutlak"
+                                | "şimdi"
+                                | "simdi"
+                                | "uyku"
+                                | "dahil_et"
+                                | "kanal"
+                        );
                         if is_builtin {
                             env.get(name)
                         } else {
@@ -307,7 +355,10 @@ impl TypeChecker {
                         // Let's check: self.unify(&idx_ty, &Type::Number)?;
                         Ok(Type::Var(res_var))
                     }
-                    _ => Err("Tip Hatası: Sadece diziler, haritalar ve kanallar indekslenebilir".to_string()),
+                    _ => Err(
+                        "Tip Hatası: Sadece diziler, haritalar ve kanallar indekslenebilir"
+                            .to_string(),
+                    ),
                 }
             }
             Expr::HataIse(base_expr, body) => {
@@ -384,14 +435,15 @@ impl TypeChecker {
                     }
                     Type::Channel(inner) => {
                         self.unify(&idx_ty, &Type::Number)?;
-                        self.unify(&_val_ty, &*inner)?;
+                        self.unify(&_val_ty, &inner)?;
                     }
                     Type::Var(_id) => {
                         // Keep it flexible so it can unify with either Array or Channel
                     }
                     _ => {
                         return Err(
-                            "Tip Hatası: Sadece diziler, haritalar ve kanallar güncellenebilir".to_string()
+                            "Tip Hatası: Sadece diziler, haritalar ve kanallar güncellenebilir"
+                                .to_string(),
                         )
                     }
                 }
@@ -444,12 +496,22 @@ impl TypeChecker {
                     self.infer_stmt(s, &mut body_env, current_ret_ty)?;
                 }
             }
-            Statement::FnDecl { name, generics, params, return_type, body } => {
+            Statement::FnDecl {
+                name,
+                generics,
+                params,
+                return_type,
+                body,
+            } => {
                 let ret_ty = if let Some(ret_str) = return_type {
                     // Resolve explicit type. For simple parser, parse string type names:
                     // e.g. "Sayı?", "Sayı", "Metin", etc.
                     let is_nullable = ret_str.ends_with('?');
-                    let base_name = if is_nullable { &ret_str[0..ret_str.len()-1] } else { ret_str.as_str() };
+                    let base_name = if is_nullable {
+                        &ret_str[0..ret_str.len() - 1]
+                    } else {
+                        ret_str.as_str()
+                    };
                     let base_ty = match base_name {
                         "Sayı" | "sayı" => Type::Number,
                         "Metin" | "metin" => Type::String,
@@ -463,7 +525,11 @@ impl TypeChecker {
                             }
                         }
                     };
-                    if is_nullable { Type::Option(Box::new(base_ty)) } else { base_ty }
+                    if is_nullable {
+                        Type::Option(Box::new(base_ty))
+                    } else {
+                        base_ty
+                    }
                 } else {
                     let ret_var = self.new_var();
                     Type::Var(ret_var)
@@ -474,7 +540,11 @@ impl TypeChecker {
                 for (p_name, p_type_str_opt) in params {
                     let p_ty = if let Some(p_type_str) = p_type_str_opt {
                         let is_nullable = p_type_str.ends_with('?');
-                        let base_name = if is_nullable { &p_type_str[0..p_type_str.len()-1] } else { p_type_str.as_str() };
+                        let base_name = if is_nullable {
+                            &p_type_str[0..p_type_str.len() - 1]
+                        } else {
+                            p_type_str.as_str()
+                        };
                         let base_ty = match base_name {
                             "Sayı" | "sayı" => Type::Number,
                             "Metin" | "metin" => Type::String,
@@ -488,7 +558,11 @@ impl TypeChecker {
                                 }
                             }
                         };
-                        if is_nullable { Type::Option(Box::new(base_ty)) } else { base_ty }
+                        if is_nullable {
+                            Type::Option(Box::new(base_ty))
+                        } else {
+                            base_ty
+                        }
                     } else {
                         let p_var = self.new_var();
                         Type::Var(p_var)
