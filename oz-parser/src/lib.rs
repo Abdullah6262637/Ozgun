@@ -66,6 +66,20 @@ fn expr_parser(
             .map(Expr::Map)
             .map_with_span(Spanned::new);
 
+        let lambda = just(Token::Islev)
+            .ignore_then(
+                ident_parser()
+                    .separated_by(just(Token::Comma))
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+            )
+            .then(
+                stmt.clone()
+                    .repeated()
+                    .delimited_by(just(Token::LBrace), just(Token::RBrace))
+            )
+            .map(|(params, body)| Expr::Lambda { params, body })
+            .map_with_span(Spanned::new);
+
         let literal = num_parser()
             .or(string_parser())
             .or(just(Token::Dogru)
@@ -76,7 +90,8 @@ fn expr_parser(
             .or(just(Token::Bos)
                 .map_with_span(|_, span| Spanned::new(Expr::Literal(Literal::Bos), span)))
             .or(array_literal)
-            .or(map_literal);
+            .or(map_literal)
+            .or(lambda);
 
         let qualified_path = ident_parser()
             .then_ignore(just(Token::DoubleColon))
@@ -383,13 +398,45 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
     })
 }
 
+use logos::Logos;
+
+pub mod desugar;
+
+pub fn parse_expr_source(src: &str, offset: usize) -> Result<Spanned<Expr>, String> {
+    let lexer = oz_lexer::Token::lexer(src);
+    let mut tokens = Vec::new();
+    for (token_res, span) in lexer.spanned() {
+        if let Ok(token) = token_res {
+            let shifted_span = (span.start + offset)..(span.end + offset);
+            tokens.push((token, shifted_span));
+        } else {
+            return Err(format!("Sözcüksel analiz hatası (karakter no: {})", span.start + offset));
+        }
+    }
+    let len = src.len();
+    
+    // We need statement parser to build expr parser
+    let stmt_parser = statement_parser();
+    let parser = expr_parser(stmt_parser).then_ignore(end());
+    let stream = chumsky::Stream::from_iter(offset..(offset + len), tokens.into_iter());
+    
+    parser.parse(stream).map_err(|errs| {
+        format!("Ayrıştırma hatası: {:?}", errs)
+    })
+}
+
 pub fn parse_tokens(
     tokens: Vec<(Token, Range<usize>)>,
     len: usize,
 ) -> Result<Vec<Spanned<Statement>>, Vec<Simple<Token>>> {
     let parser = statement_parser().repeated().then_ignore(end());
     let stream = chumsky::Stream::from_iter(len..len, tokens.into_iter());
-    parser.parse(stream)
+    let mut ast = parser.parse(stream)?;
+    if let Err(e) = desugar::desugar_ast(&mut ast) {
+        // Return desugaring error as simple custom error
+        return Err(vec![Simple::custom(0..len, e)]);
+    }
+    Ok(ast)
 }
 
 #[cfg(test)]

@@ -340,6 +340,12 @@ impl CCodegen {
                     base_str, body_code
                 ))
             }
+            Expr::InterpolatedString(_) => {
+                unimplemented!("Metin içi değişken (String Interpolation) C Backend tarafında henüz desteklenmemektedir.");
+            }
+            Expr::Lambda { .. } => {
+                unimplemented!("Anonim fonksiyonlar (Lambda) C Backend tarafında henüz desteklenmemektedir.");
+            }
         }
     }
 }

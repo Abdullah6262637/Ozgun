@@ -44,6 +44,12 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum InterpolatedPart {
+    Text(String),
+    Expr(Box<Spanned<Expr>>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Identifier(Option<Vec<String>>, String),
@@ -54,6 +60,11 @@ pub enum Expr {
     Map(Vec<(Spanned<Expr>, Spanned<Expr>)>),
     Index(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     HataIse(Box<Spanned<Expr>>, Vec<Spanned<Statement>>),
+    InterpolatedString(Vec<InterpolatedPart>),
+    Lambda {
+        params: Vec<String>,
+        body: Vec<Spanned<Statement>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

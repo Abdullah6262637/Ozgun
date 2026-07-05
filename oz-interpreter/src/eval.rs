@@ -459,6 +459,32 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 res
             }
         }
+        Expr::InterpolatedString(parts) => {
+            let mut result = String::new();
+            for part in parts {
+                match part {
+                    oz_parser::ast::InterpolatedPart::Text(s) => result.push_str(s),
+                    oz_parser::ast::InterpolatedPart::Expr(e) => {
+                        let val = eval_expr(e, env)?;
+                        let s = match val {
+                            Val::String(ref s) => s.clone(),
+                            Val::Number(n) => n.to_string(),
+                            Val::Boolean(b) => (if b { "doğru" } else { "yanlış" }).to_string(),
+                            Val::Bos => "boş".to_string(),
+                            _ => format!("{:?}", val),
+                        };
+                        result.push_str(&s);
+                    }
+                }
+            }
+            Ok(Val::String(result))
+        }
+        &oz_parser::ast::Expr::Lambda { ref params, ref body } => {
+            Ok(Val::Function {
+                params: params.clone(),
+                body: body.clone(),
+            })
+        }
     }
 }
 

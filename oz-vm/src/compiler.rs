@@ -451,6 +451,67 @@ impl Compiler {
                 let end_idx = self.instructions.len();
                 self.instructions[jump_end_idx] = Instruction::Jump(end_idx);
             }
+            Expr::InterpolatedString(parts) => {
+                if parts.is_empty() {
+                    self.instructions.push(Instruction::Constant(Val::String(String::new())));
+                } else {
+                    for (i, part) in parts.iter().enumerate() {
+                        match part {
+                            oz_parser::ast::InterpolatedPart::Text(s) => {
+                                self.instructions.push(Instruction::Constant(Val::String(s.clone())));
+                            }
+                            oz_parser::ast::InterpolatedPart::Expr(e) => {
+                                self.compile_expr(e)?;
+                                self.instructions.push(Instruction::ToString);
+                            }
+                        }
+                        if i > 0 {
+                            self.instructions.push(Instruction::Add);
+                        }
+                    }
+                }
+            }
+            Expr::Lambda { params, body } => {
+                let jump_over_idx = self.instructions.len();
+                self.instructions.push(Instruction::Jump(0));
+
+                let fn_start = self.instructions.len();
+
+                // local scope
+                self.scopes.push(HashMap::new());
+                let old_next_local = self.next_local;
+                self.next_local = 0;
+
+                for param in params.iter().rev() {
+                    let param_ref = self.declare_variable(param);
+                    match &param_ref {
+                        VarRef::Local(slot) => {
+                            self.instructions.push(Instruction::StoreLocal(*slot))
+                        }
+                        VarRef::Global(slot) => self
+                            .instructions
+                            .push(Instruction::StoreGlobal(slot.clone())),
+                    }
+                }
+
+                for s in body {
+                    self.compile_stmt(s)?;
+                }
+                self.instructions.push(Instruction::Constant(Val::Bos));
+                self.instructions.push(Instruction::Return);
+
+                self.scopes.pop();
+                self.next_local = old_next_local;
+
+                let fn_end = self.instructions.len();
+                self.instructions[jump_over_idx] = Instruction::Jump(fn_end);
+
+                self.instructions.push(Instruction::Constant(Val::Function {
+                    name: "<lambda>".to_string(),
+                    param_count: params.len(),
+                    entry_ip: fn_start,
+                }));
+            }
         }
         Ok(())
     }

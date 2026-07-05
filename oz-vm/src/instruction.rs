@@ -68,4 +68,5 @@ pub enum Instruction {
     MakeChannel,
     ChannelSend,
     ChannelReceive,
+    ToString,
 }

@@ -248,6 +248,17 @@ impl VM {
                         _ => return Err("HATA: Geçersiz karşılaştırma".to_string()),
                     }
                 }
+                Instruction::ToString => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (ToString)")?;
+                    let s = match val {
+                        Val::String(s) => s,
+                        Val::Number(n) => n.to_string(),
+                        Val::Boolean(b) => (if b { "doğru" } else { "yanlış" }).to_string(),
+                        Val::Bos => "boş".to_string(),
+                        _ => format!("{:?}", val), // Fallback for arrays/maps
+                    };
+                    self.stack.push(Val::String(s));
+                }
                 Instruction::And => {
                     let b = self.stack.pop().ok_or("HATA: Yığın boş (And rhs)")?;
                     let a = self.stack.pop().ok_or("HATA: Yığın boş (And lhs)")?;

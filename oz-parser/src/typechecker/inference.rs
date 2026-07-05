@@ -60,6 +60,14 @@ impl TypeChecker {
                     ))
                 }
             }
+            Expr::InterpolatedString(parts) => {
+                for part in parts {
+                    if let crate::ast::InterpolatedPart::Expr(e) = part {
+                        self.infer_expr(e, env, current_ret_ty)?;
+                    }
+                }
+                Ok(Type::String)
+            }
             Expr::Unary(op, operand) => {
                 let t = self.infer_expr(operand, env, current_ret_ty)?;
                 match op {
@@ -437,6 +445,35 @@ impl TypeChecker {
                     self.unify(&base_ty, &body_ty)?;
                 }
                 Ok(self.resolve(&base_ty))
+            }
+            Expr::Lambda { params, body } => {
+                let mut param_tys = Vec::new();
+                let mut child_env = TypeEnv::extend(env);
+                for param in params {
+                    let p_var = self.new_var();
+                    let p_ty = Type::Var(p_var);
+                    param_tys.push(p_ty.clone());
+                    child_env.set(
+                        param.clone(),
+                        Scheme {
+                            vars: vec![],
+                            ty: p_ty,
+                        },
+                    );
+                }
+
+                let ret_ty_var = self.new_var();
+                let expected_ret_ty = Type::Var(ret_ty_var);
+                let opt_expected = Some(expected_ret_ty.clone());
+
+                for stmt in body {
+                    self.infer_stmt(stmt, &mut child_env, &opt_expected)?;
+                }
+
+                Ok(Type::Function {
+                    params: param_tys,
+                    ret: Box::new(expected_ret_ty),
+                })
             }
         }
     }
