@@ -4,6 +4,15 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "chumsky"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ariadne"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "toml"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "logos"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
