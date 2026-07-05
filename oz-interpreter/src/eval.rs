@@ -479,10 +479,7 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
             }
             Ok(Val::String(result))
         }
-        &oz_parser::ast::Expr::Lambda {
-            ref params,
-            ref body,
-        } => Ok(Val::Function {
+        oz_parser::ast::Expr::Lambda { params, body } => Ok(Val::Function {
             params: params.clone(),
             body: body.clone(),
         }),
