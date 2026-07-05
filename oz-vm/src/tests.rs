@@ -387,8 +387,8 @@ fn test_dahil_et_std() {
         dahil_et("std::zaman");
         dahil_et("std::dosya");
         
-        kok_degeri = karekok(9);
-        ust_degeri = ust(2, 3);
+        kok_degeri = std::matematik::karekok(9);
+        ust_degeri = std::matematik::ust(2, 3);
     "#;
     let res = run_bytecode(src);
     assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
@@ -447,15 +447,15 @@ fn test_dosya_sonuc_hata_yonetimi() {
     let src = r#"
         dahil_et("std::dosya");
         
-        okuma_sonucu = oku("olmayan_dosya.txt");
+        okuma_sonucu = std::dosya::oku("olmayan_dosya.txt");
         hata_durumu = okuma_sonucu["tur"];
         hata_mesaji = okuma_sonucu["hata"];
         
-        yazma_sonucu = yaz("gecici_test_vm.txt", "Tilk Test VM");
+        yazma_sonucu = std::dosya::yaz("gecici_test_vm.txt", "Tilk Test VM");
         yazma_durumu = yazma_sonucu["tur"];
         yazma_degeri = yazma_sonucu["deger"];
         
-        silme_sonucu = sil("gecici_test_vm.txt");
+        silme_sonucu = std::dosya::sil("gecici_test_vm.txt");
         silme_durumu = silme_sonucu["tur"];
     "#;
     let res = run_bytecode(src);

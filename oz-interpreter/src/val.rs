@@ -19,6 +19,7 @@ pub enum Val {
     Map(Rc<RefCell<HashMap<String, Val>>>),
     Hata(String),
     Task(Rc<RefCell<TaskState>>),
+    Return(Box<Val>),
 }
 
 #[derive(Clone)]
@@ -62,6 +63,7 @@ impl std::fmt::Debug for Val {
             }
             Val::Hata(msg) => write!(f, "Hata({:?})", msg),
             Val::Task(_) => write!(f, "Task"),
+            Val::Return(v) => write!(f, "Return({:?})", v),
         }
     }
 }
@@ -77,6 +79,7 @@ impl PartialEq for Val {
             (Val::Map(a), Val::Map(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Val::Hata(a), Val::Hata(b)) => a == b,
             (Val::Task(a), Val::Task(b)) => Rc::ptr_eq(a, b),
+            (Val::Return(a), Val::Return(b)) => a == b,
             _ => false,
         }
     }
@@ -172,6 +175,10 @@ impl Env {
         self.0.borrow_mut().bindings.insert(name, val);
     }
 
+    pub fn set_local(&self, name: String, val: Val) {
+        self.0.borrow_mut().bindings.insert(name, val);
+    }
+
     fn update_in_parent(&self, name: &str, val: &Val) -> bool {
         let mut inner = self.0.borrow_mut();
         if inner.bindings.contains_key(name) {
@@ -182,5 +189,20 @@ impl Env {
         } else {
             false
         }
+    }
+
+    pub fn get_bindings(&self) -> HashMap<String, Val> {
+        let mut bindings = HashMap::new();
+        let mut curr = Some(self.0.clone());
+        while let Some(inner_rc) = curr {
+            let inner = inner_rc.borrow();
+            for (k, v) in &inner.bindings {
+                if !bindings.contains_key(k) {
+                    bindings.insert(k.clone(), v.clone());
+                }
+            }
+            curr = inner.parent.clone();
+        }
+        bindings
     }
 }

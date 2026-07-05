@@ -78,18 +78,24 @@ fn expr_parser(
             .or(array_literal)
             .or(map_literal);
 
-        let call_or_var = ident_parser()
+        let qualified_path = ident_parser()
+            .then_ignore(just(Token::DoubleColon))
+            .repeated();
+
+        let call_or_var = qualified_path
+            .then(ident_parser())
             .then(
                 expr.clone()
                     .separated_by(just(Token::Comma))
                     .delimited_by(just(Token::LParen), just(Token::RParen))
                     .or_not(),
             )
-            .map_with_span(|(name, args), span| {
+            .map_with_span(|((path, name), args), span| {
+                let module_prefix = if path.is_empty() { None } else { Some(path) };
                 let node = if let Some(args) = args {
-                    Expr::Call(name, args)
+                    Expr::Call(module_prefix, name, args)
                 } else {
-                    Expr::Identifier(name)
+                    Expr::Identifier(module_prefix, name)
                 };
                 Spanned::new(node, span)
             });
@@ -216,7 +222,13 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
             .then(expr.clone())
             .then_ignore(just(Token::Semicolon))
             .try_map(|(lhs, rhs), span| match lhs.node {
-                Expr::Identifier(name) => Ok(Spanned::new(Statement::VarDecl(name, rhs), span)),
+                Expr::Identifier(prefix, name) => {
+                    if prefix.is_some() {
+                        Err(Simple::custom(span, "Modül önekli tanımlayıcılara doğrudan atama yapılamaz"))
+                    } else {
+                        Ok(Spanned::new(Statement::VarDecl(name, rhs), span))
+                    }
+                }
                 Expr::Index(array, index) => Ok(Spanned::new(
                     Statement::IndexAssignment(*array, *index, rhs),
                     span,
@@ -277,15 +289,43 @@ fn statement_parser() -> impl Parser<Token, Spanned<Statement>, Error = Simple<T
                 .map_with_span(Spanned::new);
 
         // işlev topla(a, b) { ... }
+        // işlev topla<T>(a: T, b: T): T { ... }
+        let type_annot = just(Token::Colon)
+            .ignore_then(ident_parser().then(just(Token::QuestionMark).or_not()))
+            .map(|(t, opt_q)| {
+                if opt_q.is_some() {
+                    format!("{}?", t)
+                } else {
+                    t
+                }
+            });
+
+        let generics_parser = just(Token::Lt)
+            .ignore_then(ident_parser().separated_by(just(Token::Comma)))
+            .then_ignore(just(Token::Gt))
+            .or_not()
+            .map(|opt| opt.unwrap_or_default());
+
+        let param_parser = ident_parser()
+            .then(type_annot.clone().or_not());
+
         let fn_decl = just(Token::Islev)
             .ignore_then(ident_parser())
+            .then(generics_parser)
             .then(
-                ident_parser()
+                param_parser
                     .separated_by(just(Token::Comma))
                     .delimited_by(just(Token::LParen), just(Token::RParen)),
             )
+            .then(type_annot.or_not())
             .then(block.clone())
-            .map(|((name, params), body)| Statement::FnDecl { name, params, body })
+            .map(|((((name, generics), params), return_type), body)| Statement::FnDecl {
+                name,
+                generics,
+                params,
+                return_type,
+                body,
+            })
             .map_with_span(Spanned::new);
 
         // döndür x;

@@ -48,3 +48,28 @@ fn test_ornek5_karma() {
     let res = parse_helper(src);
     assert!(res.is_ok(), "Ayrıştırma hatası: {:?}", res);
 }
+
+#[test]
+fn test_generics_ve_tipler() {
+    let src = r#"
+        işlev topla<T>(x: T, y: T): T {
+            döndür x + y;
+        }
+    "#;
+    let res = parse_helper(src);
+    assert!(res.is_ok(), "Jenerik ve tip belirtimli fonksiyon ayrıştırma hatası: {:?}", res);
+}
+
+#[test]
+fn test_null_safety() {
+    let src = r#"
+        işlev bul_ogrenci(id: Sayı): Metin? {
+            döndür boş;
+        }
+    "#;
+    let res = parse_helper(src);
+    assert!(res.is_ok(), "Nullable tip belirtimli fonksiyon ayrıştırma hatası: {:?}", res);
+    let ast = res.unwrap();
+    let check_res = typechecker::check_program(&ast);
+    assert!(check_res.is_ok(), "Tip denetimi hatası: {:?}", check_res);
+}

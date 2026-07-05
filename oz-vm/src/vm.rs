@@ -656,14 +656,27 @@ impl VM {
                 }
                 Instruction::JumpIfError(dest) => {
                     let val = self.stack.pop().ok_or("HATA: Yığın boş (JumpIfError)")?;
-                    match val {
-                        Val::Hata(msg) => {
-                            self.stack.push(Val::String(msg));
+                    let error_msg = match &val {
+                        Val::Hata(msg) => Some(msg.clone()),
+                        Val::Map(map) => {
+                            let m = map.borrow();
+                            if m.get("tur") == Some(&Val::String("hata".to_string())) {
+                                match m.get("hata") {
+                                    Some(Val::String(s)) => Some(s.clone()),
+                                    _ => Some("Bilinmeyen hata".to_string()),
+                                }
+                            } else {
+                                None
+                            }
                         }
-                        _ => {
-                            self.stack.push(val);
-                            self.ip = *dest;
-                        }
+                        _ => None,
+                    };
+
+                    if let Some(msg) = error_msg {
+                        self.stack.push(Val::String(msg));
+                    } else {
+                        self.stack.push(val);
+                        self.ip = *dest;
                     }
                 }
                 Instruction::AwaitTask => {

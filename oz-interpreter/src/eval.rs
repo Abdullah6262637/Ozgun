@@ -12,9 +12,15 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
             Literal::Boolean(b) => Ok(Val::Boolean(*b)),
             Literal::Bos => Ok(Val::Bos),
         },
-        Expr::Identifier(name) => env
-            .get(name)
-            .ok_or_else(|| format!("HATA: Tanımlanamayan değişken '{}'", name)),
+        Expr::Identifier(prefix, name) => {
+            let lookup_name = if let Some(p) = prefix {
+                format!("{}::{}", p.join("::"), name)
+            } else {
+                name.clone()
+            };
+            env.get(&lookup_name)
+                .ok_or_else(|| format!("HATA: Tanımlanamayan değişken '{}'", lookup_name))
+        }
         Expr::Unary(op, operand) => {
             let val = eval_expr(operand, env)?;
             match op {
@@ -38,17 +44,15 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 BinaryOp::Add => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a + b)),
                     (Val::String(a), Val::String(b)) => Ok(Val::String(format!("{}{}", a, b))),
-                    _ => Err("HATA: Toplama işlemi geçersiz tipler arasında yapılamaz".to_string()),
+                    _ => Err("HATA: Toplama işlemi sayılar veya metinler arasında yapılabilir".to_string()),
                 },
                 BinaryOp::Sub => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a - b)),
-                    _ => {
-                        Err("HATA: Çıkarma işlemi sadece sayılar arasında yapılabilir".to_string())
-                    }
+                    _ => Err("HATA: Çıkarma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Mul => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a * b)),
-                    _ => Err("HATA: Çarpma işlemi sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Çarpma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Div => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => {
@@ -58,47 +62,42 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                             Ok(Val::Number(a / b))
                         }
                     }
-                    _ => Err("HATA: Bölme işlemi sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Bölme işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Mod => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Number(a % b)),
-                    _ => Err("HATA: Modül işlemi sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Kalan işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Eq => Ok(Val::Boolean(left == right)),
                 BinaryOp::Ne => Ok(Val::Boolean(left != right)),
                 BinaryOp::Lt => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Boolean(a < b)),
-                    _ => Err("HATA: Karşılaştırma sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Karşılaştırma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Gt => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Boolean(a > b)),
-                    _ => Err("HATA: Karşılaştırma sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Karşılaştırma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Le => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Boolean(a <= b)),
-                    _ => Err("HATA: Karşılaştırma sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Karşılaştırma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::Ge => match (left, right) {
                     (Val::Number(a), Val::Number(b)) => Ok(Val::Boolean(a >= b)),
-                    _ => Err("HATA: Karşılaştırma sadece sayılar arasında yapılabilir".to_string()),
+                    _ => Err("HATA: Karşılaştırma işlemi sadece sayılarla yapılabilir".to_string()),
                 },
                 BinaryOp::And => match (left, right) {
                     (Val::Boolean(a), Val::Boolean(b)) => Ok(Val::Boolean(a && b)),
-                    _ => Err(
-                        "HATA: Mantıksal VE sadece boolean tipler arasında yapılabilir".to_string(),
-                    ),
+                    _ => Err("HATA: Mantıksal VE işlemi sadece mantıksal değerlerle yapılabilir".to_string()),
                 },
                 BinaryOp::Or => match (left, right) {
                     (Val::Boolean(a), Val::Boolean(b)) => Ok(Val::Boolean(a || b)),
-                    _ => Err(
-                        "HATA: Mantıksal VEYA sadece boolean tipler arasında yapılabilir"
-                            .to_string(),
-                    ),
+                    _ => Err("HATA: Mantıksal VEYA işlemi sadece mantıksal değerlerle yapılabilir".to_string()),
                 },
             }
         }
-        Expr::Call(name, args) => {
-            if name == "dahil_et" {
+        Expr::Call(prefix, name, args) => {
+            if prefix.is_none() && name == "dahil_et" {
                 if args.len() != 1 {
                     return Err(
                         "HATA: dahil_et tek bir dosya yolu parametresi almalıdır".to_string()
@@ -109,7 +108,7 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     let embedded_content = match path_str.as_str() {
                         "std::sonuc" => Some("işlev basarili(deger) { r = {}; r[\"tur\"] = \"basarili\"; r[\"deger\"] = deger; döndür r; } işlev hata(mesaj) { r = {}; r[\"tur\"] = \"hata\"; r[\"hata\"] = mesaj; döndür r; }".to_string()),
                         "std::matematik" => Some("işlev karekok(x) { döndür kök(x); } işlev ust(taban, kuvvet) { döndür üs(taban, kuvvet); } işlev mutlak_deger(x) { döndür mutlak(x); }".to_string()),
-                        "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { döndür (basarili(dosya_oku(yol))) hata_ise { döndür hata(\"Okuma hatası\"); }; } işlev yaz_yardimci(yol, icerik) { dosya_yaz(yol, icerik); döndür basarili(boş); } işlev yaz(yol, icerik) { döndür (yaz_yardimci(yol, icerik)) hata_ise { döndür hata(\"Yazma hatası\"); }; } işlev sil_yardimci(yol) { dosya_sil(yol); döndür basarili(boş); } işlev sil(yol) { döndür (sil_yardimci(yol)) hata_ise { döndür hata(\"Silme hatası\"); }; }".to_string()),
+                        "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { r = dosya_oku(yol); (r) hata_ise { döndür std::sonuc::hata(\"Okuma hatası\"); }; döndür std::sonuc::basarili(r); } işlev yaz(yol, icerik) { r = dosya_yaz(yol, icerik); (r) hata_ise { döndür std::sonuc::hata(\"Yazma hatası\"); }; döndür std::sonuc::basarili(boş); } işlev sil(yol) { r = dosya_sil(yol); (r) hata_ise { döndür std::sonuc::hata(\"Silme hatası\"); }; döndür std::sonuc::basarili(boş); }".to_string()),
                         "std::zaman" => Some("işlev simdi() { döndür şimdi(); } işlev bekle(ms) { döndür uyku(ms); }".to_string()),
                         _ => None,
                     };
@@ -126,20 +125,12 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                         (canonical_path, read_content)
                     };
 
-                    // 1. Döngüsel Bağımlılık Kontrolü
                     if env.is_loading(&canonical_path) {
-                        return Err(format!(
-                            "HATA: Döngüsel bağımlılık tespit edildi: {}",
-                            path_str
-                        ));
+                        return Err(format!("HATA: Döngüsel bağımlılık tespit edildi: {}", path_str));
                     }
-
-                    // 2. Çift Dahil Etme Kontrolü (Include Guard)
                     if env.is_loaded(&canonical_path) {
                         return Ok(Val::Bos);
                     }
-
-                    // Yükleme stack'ine ekle
                     env.push_loading(canonical_path.clone());
 
                     use logos::Logos;
@@ -156,9 +147,48 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     let ast = oz_parser::parse_tokens(tokens, content.len())
                         .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
 
-                    let _ = eval_program(&ast, env)?;
+                    let module_env = crate::builtins::create_global_env();
+                    // Copy existing bindings from the parent environment into the module env so it can resolve namespaces
+                    for (k, v) in env.get_bindings().into_iter() {
+                        module_env.set_local(k, v);
+                    }
+                    let _ = eval_program(&ast, &module_env)?;
 
-                    // Yükleme tamamlandı, stack'ten çıkar ve loaded_files'a ekle
+                    let has_namespace_prefix = if path_str.starts_with("std::") {
+                        Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                    } else {
+                        None
+                    };
+
+                    if let Some(ref p) = has_namespace_prefix {
+                        let prefix_str = p.join("::");
+                        for (k, v) in module_env.get_bindings().into_iter() {
+                            let is_builtin = match k.as_str() {
+                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                _ => false,
+                            };
+                            if is_builtin {
+                                continue;
+                            }
+                            if k.contains("::") {
+                                env.set_local(k, v);
+                            } else {
+                                env.set_local(format!("{}::{}", prefix_str, k), v);
+                            }
+                        }
+                    } else {
+                        for (k, v) in module_env.get_bindings().into_iter() {
+                            let is_builtin = match k.as_str() {
+                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                _ => false,
+                            };
+                            if is_builtin {
+                                continue;
+                            }
+                            env.set_local(k, v);
+                        }
+                    }
+
                     env.pop_loading();
                     env.mark_loaded(canonical_path);
 
@@ -168,9 +198,26 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 }
             }
 
+            let lookup_name = if let Some(p) = prefix {
+                format!("{}::{}", p.join("::"), name)
+            } else {
+                name.clone()
+            };
+
             let func = env
-                .get(name)
-                .ok_or_else(|| format!("HATA: Tanımlanamayan işlev '{}'", name))?;
+                .get(&lookup_name)
+                .or_else(|| {
+                    let is_builtin = match name.as_str() {
+                        "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                        _ => false,
+                    };
+                    if is_builtin {
+                        env.get(name)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| format!("HATA: Tanımlanamayan işlev '{}'", lookup_name))?;
 
             let mut evaluated_args = Vec::new();
             for arg in args {
@@ -195,14 +242,16 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                         child_env.set(param, val);
                     }
                     let res = eval_program(&body, &child_env)?;
-                    Ok(res.unwrap_or(Val::Bos))
+                    let unwrapped = res.unwrap_or(Val::Bos);
+                    if let Val::Return(inner) = unwrapped {
+                        Ok(*inner)
+                    } else {
+                        Ok(unwrapped)
+                    }
                 }
                 Val::Builtin(f) => {
                     let call_res = f(evaluated_args);
-                    match call_res {
-                        Val::Hata(msg) => Err(msg),
-                        other => Ok(other),
-                    }
+                    Ok(call_res)
                 }
                 _ => Err(format!("HATA: '{}' bir işlev değil", name)),
             }
@@ -268,20 +317,32 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
         }
         Expr::HataIse(base, body) => {
             let res = eval_expr(base, env);
-            if let Err(msg) = res {
-                let child_env = Env::extend(env);
-                child_env.set("hata_mesajı".to_string(), Val::String(msg.clone()));
-                child_env.set("hata_mesaji".to_string(), Val::String(msg));
-                match eval_program(body, &child_env)? {
-                    Some(val) => Ok(val),
-                    None => Ok(Val::Bos),
+            let opt_err_msg = match &res {
+                Err(msg) => Some(msg.clone()),
+                Ok(Val::Hata(msg)) => Some(msg.clone()),
+                Ok(Val::Map(map)) => {
+                    let m = map.borrow();
+                    if m.get("tur") == Some(&Val::String("hata".to_string())) {
+                        match m.get("hata") {
+                            Some(Val::String(s)) => Some(s.clone()),
+                            _ => Some("Bilinmeyen hata".to_string()),
+                        }
+                    } else {
+                        None
+                    }
                 }
-            } else if let Ok(Val::Hata(msg)) = res {
+                _ => None,
+            };
+
+            if let Some(msg) = opt_err_msg {
                 let child_env = Env::extend(env);
                 child_env.set("hata_mesajı".to_string(), Val::String(msg.clone()));
                 child_env.set("hata_mesaji".to_string(), Val::String(msg));
                 match eval_program(body, &child_env)? {
-                    Some(val) => Ok(val),
+                    Some(val) => {
+                        // Return signal propagated inside Val::Return
+                        Ok(Val::Return(Box::new(val)))
+                    }
                     None => Ok(Val::Bos),
                 }
             } else {
@@ -295,13 +356,21 @@ pub fn eval_stmt(stmt: &Spanned<Statement>, env: &Env) -> Result<Option<Val>, St
     match &stmt.node {
         Statement::VarDecl(name, value) => {
             let val = eval_expr(value, env)?;
-            env.set(name.clone(), val);
-            Ok(None)
+            if let Val::Return(_) = val {
+                Ok(Some(val))
+            } else {
+                env.set(name.clone(), val);
+                Ok(None)
+            }
         }
         Statement::Assignment(name, value) => {
             let val = eval_expr(value, env)?;
-            env.set(name.clone(), val);
-            Ok(None)
+            if let Val::Return(_) = val {
+                Ok(Some(val))
+            } else {
+                env.set(name.clone(), val);
+                Ok(None)
+            }
         }
         Statement::IndexAssignment(array_expr, index_expr, value_expr) => {
             let target_val = eval_expr(array_expr, env)?;
@@ -419,11 +488,12 @@ pub fn eval_stmt(stmt: &Spanned<Statement>, env: &Env) -> Result<Option<Val>, St
             }
             Ok(None)
         }
-        Statement::FnDecl { name, params, body } => {
+        Statement::FnDecl { name, generics: _, params, return_type: _, body } => {
+            let param_names: Vec<String> = params.iter().map(|(p_name, _)| p_name.clone()).collect();
             env.set(
                 name.clone(),
                 Val::Function {
-                    params: params.clone(),
+                    params: param_names,
                     body: body.clone(),
                 },
             );
@@ -438,8 +508,12 @@ pub fn eval_stmt(stmt: &Spanned<Statement>, env: &Env) -> Result<Option<Val>, St
             }
         }
         Statement::Expr(expr) => {
-            eval_expr(expr, env)?;
-            Ok(None)
+            let val = eval_expr(expr, env)?;
+            if let Val::Return(_) = val {
+                Ok(Some(val))
+            } else {
+                Ok(None)
+            }
         }
         Statement::Tamamlaninca(gorev_expr, body) => {
             let val = eval_expr(gorev_expr, env)?;

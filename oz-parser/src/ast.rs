@@ -46,10 +46,10 @@ pub enum UnaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Identifier(String),
+    Identifier(Option<Vec<String>>, String),
     Binary(Box<Spanned<Expr>>, BinaryOp, Box<Spanned<Expr>>),
     Unary(UnaryOp, Box<Spanned<Expr>>),
-    Call(String, Vec<Spanned<Expr>>),
+    Call(Option<Vec<String>>, String, Vec<Spanned<Expr>>),
     Array(Vec<Spanned<Expr>>),
     Map(Vec<(Spanned<Expr>, Spanned<Expr>)>),
     Index(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -82,7 +82,9 @@ pub enum Statement {
     },
     FnDecl {
         name: String,
-        params: Vec<String>,
+        generics: Vec<String>,
+        params: Vec<(String, Option<String>)>,
+        return_type: Option<String>,
         body: Vec<Spanned<Statement>>,
     },
     Return(Option<Spanned<Expr>>),

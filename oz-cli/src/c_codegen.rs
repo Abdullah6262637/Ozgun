@@ -409,13 +409,13 @@ TilkVal not_val(TilkVal v) {
 
         // Generate C function bodies for all collected declarations
         for decl in &fn_decls {
-            if let Statement::FnDecl { name, params, body } = decl {
+            if let Statement::FnDecl { name, generics: _, params, return_type: _, body } = decl {
                 let mut fn_code = format!("\nTilkVal {}(", sanitize_identifier(name));
-                for (i, p) in params.iter().enumerate() {
+                for (i, (p_name, _)) in params.iter().enumerate() {
                     if i > 0 {
                         fn_code.push_str(", ");
                     }
-                    fn_code.push_str(&format!("TilkVal {}", sanitize_identifier(p)));
+                    fn_code.push_str(&format!("TilkVal {}", sanitize_identifier(p_name)));
                 }
                 fn_code.push_str(") {\n");
                 for s in body {
@@ -570,7 +570,14 @@ TilkVal not_val(TilkVal v) {
                 Literal::Boolean(b) => Ok(format!("make_boolean({})", b)),
                 Literal::Bos => Ok("make_bos()".to_string()),
             },
-            Expr::Identifier(name) => Ok(sanitize_identifier(name)),
+            Expr::Identifier(prefix, name) => {
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+                Ok(sanitize_identifier(&lookup_name))
+            }
             Expr::Unary(op, operand) => {
                 let op_str = self.compile_expr(operand)?;
                 let helper = match op {
@@ -599,8 +606,13 @@ TilkVal not_val(TilkVal v) {
                 };
                 Ok(format!("{}({}, {})", helper, lhs_str, rhs_str))
             }
-            Expr::Call(name, args) => {
-                if name == "dahil_et" {
+            Expr::Call(prefix, name, args) => {
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+                if lookup_name == "dahil_et" {
                     if let Some(Expr::Literal(Literal::String(path))) =
                         args.first().map(|s| &s.node)
                     {
@@ -713,8 +725,8 @@ fn collect_function_decls(stmts: &[Spanned<Statement>]) -> Vec<Statement> {
                 decls.extend(collect_function_decls(body));
             }
             Statement::Expr(spanned_expr) => {
-                if let Expr::Call(name, args) = &spanned_expr.node {
-                    if name == "dahil_et" {
+                if let Expr::Call(prefix, name, args) = &spanned_expr.node {
+                    if prefix.is_none() && name == "dahil_et" {
                         if let Some(spanned_arg) = args.first() {
                             if let Expr::Literal(oz_parser::ast::Literal::String(path)) =
                                 &spanned_arg.node

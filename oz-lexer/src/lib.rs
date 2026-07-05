@@ -98,11 +98,17 @@ pub enum Token {
     #[token(":")]
     Colon,
 
+    #[token("::")]
+    DoubleColon,
+
     #[token("[")]
     LBracket,
 
     #[token("]")]
     RBracket,
+
+    #[token("?")]
+    QuestionMark,
 
     // Literals & Identifiers
     #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().to_string())]

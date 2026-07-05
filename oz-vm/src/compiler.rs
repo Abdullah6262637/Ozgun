@@ -15,6 +15,7 @@ pub struct Compiler {
     next_local: u16,
     loaded_files: HashSet<PathBuf>,
     loading_stack: Vec<PathBuf>,
+    current_namespace: Option<String>,
 }
 
 impl Compiler {
@@ -25,6 +26,7 @@ impl Compiler {
             next_local: 0,
             loaded_files: HashSet::new(),
             loading_stack: Vec::new(),
+            current_namespace: None,
         }
     }
 
@@ -34,7 +36,36 @@ impl Compiler {
                 return VarRef::Local(slot);
             }
         }
-        VarRef::Global(name.to_string())
+        let is_builtin = match name {
+            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+            _ => {
+                let name_without_prefix = if name.contains("::") {
+                    name.split("::").last().unwrap_or(name)
+                } else {
+                    name
+                };
+                match name_without_prefix {
+                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                    _ => false,
+                }
+            }
+        };
+        let resolved_name = if is_builtin {
+            if name.contains("::") {
+                name.split("::").last().unwrap_or(name).to_string()
+            } else {
+                name.to_string()
+            }
+        } else if let Some(ref ns) = self.current_namespace {
+            if !name.contains("::") {
+                format!("{}::{}", ns, name)
+            } else {
+                name.to_string()
+            }
+        } else {
+            name.to_string()
+        };
+        VarRef::Global(resolved_name)
     }
 
     fn declare_variable(&mut self, name: &str) -> VarRef {
@@ -52,7 +83,20 @@ impl Compiler {
                 .insert(name.to_string(), slot);
             VarRef::Local(slot)
         } else {
-            VarRef::Global(name.to_string())
+            let is_builtin = match name {
+                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                _ => false,
+            };
+            let resolved_name = if let Some(ref ns) = self.current_namespace {
+                if !name.contains("::") && !is_builtin {
+                    format!("{}::{}", ns, name)
+                } else {
+                    name.to_string()
+                }
+            } else {
+                name.to_string()
+            };
+            VarRef::Global(resolved_name)
         }
     }
 
@@ -80,10 +124,17 @@ impl Compiler {
                     .push(Instruction::Constant(Val::Boolean(*b))),
                 Literal::Bos => self.instructions.push(Instruction::Constant(Val::Bos)),
             },
-            Expr::Identifier(name) => match self.get_variable(name) {
-                VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
-                VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
-            },
+            Expr::Identifier(prefix, name) => {
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+                match self.get_variable(&lookup_name) {
+                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
+                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                }
+            }
             Expr::Unary(op, operand) => {
                 self.compile_expr(operand)?;
                 match op {
@@ -94,21 +145,21 @@ impl Compiler {
             Expr::Binary(lhs, op, rhs) => match op {
                 BinaryOp::And => {
                     self.compile_expr(lhs)?;
-                    let jump_idx = self.instructions.len();
+                    let skip_rhs_idx = self.instructions.len();
                     self.instructions.push(Instruction::JumpIfFalseKeep(0));
                     self.instructions.push(Instruction::Pop);
                     self.compile_expr(rhs)?;
                     let end_idx = self.instructions.len();
-                    self.instructions[jump_idx] = Instruction::JumpIfFalseKeep(end_idx);
+                    self.instructions[skip_rhs_idx] = Instruction::JumpIfFalseKeep(end_idx);
                 }
                 BinaryOp::Or => {
                     self.compile_expr(lhs)?;
-                    let jump_idx = self.instructions.len();
+                    let skip_rhs_idx = self.instructions.len();
                     self.instructions.push(Instruction::JumpIfTrueKeep(0));
                     self.instructions.push(Instruction::Pop);
                     self.compile_expr(rhs)?;
                     let end_idx = self.instructions.len();
-                    self.instructions[jump_idx] = Instruction::JumpIfTrueKeep(end_idx);
+                    self.instructions[skip_rhs_idx] = Instruction::JumpIfTrueKeep(end_idx);
                 }
                 _ => {
                     self.compile_expr(lhs)?;
@@ -125,14 +176,14 @@ impl Compiler {
                         BinaryOp::Gt => Instruction::Gt,
                         BinaryOp::Le => Instruction::Le,
                         BinaryOp::Ge => Instruction::Ge,
-                        BinaryOp::And | BinaryOp::Or => unreachable!(),
+                        _ => unreachable!(),
                     };
                     self.instructions.push(inst);
                 }
             },
 
-            Expr::Call(name, args) => {
-                if name == "dahil_et" {
+            Expr::Call(prefix, name, args) => {
+                if prefix.is_none() && name == "dahil_et" {
                     if args.len() != 1 {
                         return Err(
                             "HATA: dahil_et tek bir dosya yolu parametresi almalıdır".to_string()
@@ -142,7 +193,7 @@ impl Compiler {
                         let embedded_content = match path_str.as_str() {
                             "std::sonuc" => Some("işlev basarili(deger) { r = {}; r[\"tur\"] = \"basarili\"; r[\"deger\"] = deger; döndür r; } işlev hata(mesaj) { r = {}; r[\"tur\"] = \"hata\"; r[\"hata\"] = mesaj; döndür r; }".to_string()),
                             "std::matematik" => Some("işlev karekok(x) { döndür kök(x); } işlev ust(taban, kuvvet) { döndür üs(taban, kuvvet); } işlev mutlak_deger(x) { döndür mutlak(x); }".to_string()),
-                            "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { döndür (basarili(dosya_oku(yol))) hata_ise { döndür hata(\"Okuma hatası\"); }; } işlev yaz_yardimci(yol, icerik) { dosya_yaz(yol, icerik); döndür basarili(boş); } işlev yaz(yol, icerik) { döndür (yaz_yardimci(yol, icerik)) hata_ise { döndür hata(\"Yazma hatası\"); }; } işlev sil_yardimci(yol) { dosya_sil(yol); döndür basarili(boş); } işlev sil(yol) { döndür (sil_yardimci(yol)) hata_ise { döndür hata(\"Silme hatası\"); }; }".to_string()),
+                            "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { r = dosya_oku(yol); (r) hata_ise { döndür std::sonuc::hata(\"Okuma hatası\"); }; döndür std::sonuc::basarili(r); } işlev yaz(yol, icerik) { r = dosya_yaz(yol, icerik); (r) hata_ise { döndür std::sonuc::hata(\"Yazma hatası\"); }; döndür std::sonuc::basarili(boş); } işlev sil(yol) { r = dosya_sil(yol); (r) hata_ise { döndür std::sonuc::hata(\"Silme hatası\"); }; döndür std::sonuc::basarili(boş); }".to_string()),
                             "std::zaman" => Some("işlev simdi() { döndür şimdi(); } işlev bekle(ms) { döndür uyku(ms); }".to_string()),
                             _ => None,
                         };
@@ -151,7 +202,7 @@ impl Compiler {
                         {
                             (std::path::PathBuf::from(path_str.clone()), content_str)
                         } else {
-                            let path = std::path::Path::new(path_str);
+                            let path = std::path::Path::new(&path_str);
                             let canonical_path = std::fs::canonicalize(path).map_err(|e| {
                                 format!("Modül yolu çözümlenemedi ({}): {}", path_str, e)
                             })?;
@@ -160,7 +211,6 @@ impl Compiler {
                             (canonical_path, read_content)
                         };
 
-                        // 1. Döngüsel Bağımlılık Kontrolü
                         if self.loading_stack.contains(&canonical_path) {
                             return Err(format!(
                                 "HATA: Döngüsel bağımlılık tespit edildi: {}",
@@ -168,13 +218,11 @@ impl Compiler {
                             ));
                         }
 
-                        // 2. Çift Dahil Etme Kontrolü (Include Guard)
                         if self.loaded_files.contains(&canonical_path) {
                             self.instructions.push(Instruction::Constant(Val::Bos));
                             return Ok(());
                         }
 
-                        // Yükleme stack'ine ekle
                         self.loading_stack.push(canonical_path.clone());
 
                         use logos::Logos;
@@ -193,11 +241,21 @@ impl Compiler {
                         let ast = oz_parser::parse_tokens(tokens, content.len())
                             .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
 
+                        let has_namespace_prefix = if path_str.starts_with("std::") {
+                            Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                        } else {
+                            None
+                        };
+
+                        let old_prefix = self.current_namespace.clone();
+                        self.current_namespace = has_namespace_prefix.map(|p| p.join("::"));
+
                         for stmt in &ast {
                             self.compile_stmt(stmt)?;
                         }
 
-                        // Yükleme tamamlandı, stack'ten çıkar ve loaded_files'a ekle
+                        self.current_namespace = old_prefix;
+
                         self.loading_stack.pop();
                         self.loaded_files.insert(canonical_path);
 
@@ -211,7 +269,14 @@ impl Compiler {
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
-                match self.get_variable(name) {
+                
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+
+                match self.get_variable(&lookup_name) {
                     VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
                     VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
                 }
@@ -241,6 +306,8 @@ impl Compiler {
                 self.instructions.push(Instruction::JumpIfError(0));
 
                 let err_var = self.declare_variable("hata_mesajı");
+                let err_var_ascii = self.declare_variable("hata_mesaji");
+
                 match &err_var {
                     VarRef::Local(slot) => {
                         self.instructions.push(Instruction::StoreLocal(*slot));
@@ -251,7 +318,6 @@ impl Compiler {
                         self.instructions.push(Instruction::LoadGlobal(slot.clone()));
                     }
                 }
-                let err_var_ascii = self.declare_variable("hata_mesaji");
                 match &err_var_ascii {
                     VarRef::Local(slot) => self.instructions.push(Instruction::StoreLocal(*slot)),
                     VarRef::Global(slot) => self.instructions.push(Instruction::StoreGlobal(slot.clone())),
@@ -395,7 +461,7 @@ impl Compiler {
                 let loop_end = self.instructions.len();
                 self.instructions[jump_end_idx] = Instruction::JumpIfFalse(loop_end);
             }
-            Statement::FnDecl { name, params, body } => {
+            Statement::FnDecl { name, generics: _, params, return_type: _, body } => {
                 let jump_over_idx = self.instructions.len();
                 self.instructions.push(Instruction::Jump(0));
 
@@ -406,7 +472,7 @@ impl Compiler {
                 let old_next_local = self.next_local;
                 self.next_local = 0;
 
-                for param in params.iter().rev() {
+                for (param, _) in params.iter().rev() {
                     let param_ref = self.declare_variable(param);
                     match &param_ref {
                         VarRef::Local(slot) => {
@@ -430,8 +496,14 @@ impl Compiler {
                 let fn_end = self.instructions.len();
                 self.instructions[jump_over_idx] = Instruction::Jump(fn_end);
 
+                let resolved_name = if let Some(ref ns) = self.current_namespace {
+                    format!("{}::{}", ns, name)
+                } else {
+                    name.clone()
+                };
+
                 self.instructions.push(Instruction::Constant(Val::Function {
-                    name: name.clone(),
+                    name: resolved_name,
                     param_count: params.len(),
                     entry_ip: fn_start,
                 }));

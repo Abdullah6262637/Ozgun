@@ -42,14 +42,19 @@ impl TypeChecker {
                 Literal::Boolean(_) => Ok(Type::Boolean),
                 Literal::Bos => Ok(Type::Bos),
             },
-            Expr::Identifier(name) => {
-                if let Some(scheme) = env.get(name) {
+            Expr::Identifier(prefix, name) => {
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+                if let Some(scheme) = env.get(&lookup_name) {
                     let instantiated = self.instantiate(&scheme);
                     let resolved = self.resolve(&instantiated);
-                    self.recorded_types.insert(name.clone(), resolved);
+                    self.recorded_types.insert(lookup_name.clone(), resolved);
                     Ok(instantiated)
                 } else {
-                    Err(format!("Tip Hatası: Tanımlanamayan değişken '{}'", name))
+                    Err(format!("Tip Hatası: Tanımlanamayan değişken '{}'", lookup_name))
                 }
             }
             Expr::Unary(op, operand) => {
@@ -73,14 +78,11 @@ impl TypeChecker {
                     BinaryOp::Add => {
                         self.unify(&t1, &t2)?;
                         let resolved = self.resolve(&t1);
-                        match resolved {
-                            Type::Number => Ok(Type::Number),
-                            Type::String => Ok(Type::String),
-                            Type::Var(id) => {
-                                self.substitutions.insert(id, Type::Number);
-                                Ok(Type::Number)
-                            }
-                            _ => Err("Tip Hatası: Toplama işlemi sadece sayılar veya metinler arasında yapılabilir".to_string()),
+                        if resolved == Type::String || resolved == Type::Number {
+                            Ok(resolved)
+                        } else {
+                            self.unify(&t1, &Type::Number)?;
+                            Ok(Type::Number)
                         }
                     }
                     BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
@@ -104,8 +106,8 @@ impl TypeChecker {
                     }
                 }
             }
-            Expr::Call(name, args) => {
-                if name == "dahil_et" {
+            Expr::Call(prefix, name, args) => {
+                if prefix.is_none() && name == "dahil_et" {
                     if args.is_empty() {
                         return Err("Tip Hatası: dahil_et en az bir argüman almalıdır".to_string());
                     }
@@ -113,7 +115,7 @@ impl TypeChecker {
                         let embedded_content = match path_str.as_str() {
                             "std::sonuc" => Some("işlev basarili(deger) { r = {}; r[\"tur\"] = \"basarili\"; r[\"deger\"] = deger; döndür r; } işlev hata(mesaj) { r = {}; r[\"tur\"] = \"hata\"; r[\"hata\"] = mesaj; döndür r; }".to_string()),
                             "std::matematik" => Some("işlev karekok(x) { döndür kök(x); } işlev ust(taban, kuvvet) { döndür üs(taban, kuvvet); } işlev mutlak_deger(x) { döndür mutlak(x); }".to_string()),
-                            "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { döndür (basarili(dosya_oku(yol))) hata_ise { döndür hata(\"Okuma hatası\"); }; } işlev yaz_yardimci(yol, icerik) { dosya_yaz(yol, icerik); döndür basarili(boş); } işlev yaz(yol, icerik) { döndür (yaz_yardimci(yol, icerik)) hata_ise { döndür hata(\"Yazma hatası\"); }; } işlev sil_yardimci(yol) { dosya_sil(yol); döndür basarili(boş); } işlev sil(yol) { döndür (sil_yardimci(yol)) hata_ise { döndür hata(\"Silme hatası\"); }; }".to_string()),
+                            "std::dosya" => Some("dahil_et(\"std::sonuc\"); işlev oku(yol) { r = dosya_oku(yol); (r) hata_ise { döndür std::sonuc::hata(\"Okuma hatası\"); }; döndür std::sonuc::basarili(r); } işlev yaz(yol, icerik) { r = dosya_yaz(yol, icerik); (r) hata_ise { döndür std::sonuc::hata(\"Yazma hatası\"); }; döndür std::sonuc::basarili(boş); } işlev sil(yol) { r = dosya_sil(yol); (r) hata_ise { döndür std::sonuc::hata(\"Silme hatası\"); }; döndür std::sonuc::basarili(boş); }".to_string()),
                             "std::zaman" => Some("işlev simdi() { döndür şimdi(); } işlev bekle(ms) { döndür uyku(ms); }".to_string()),
                             _ => None,
                         };
@@ -122,7 +124,7 @@ impl TypeChecker {
                         {
                             (std::path::PathBuf::from(path_str.clone()), content_str)
                         } else {
-                            let path = std::path::Path::new(path_str);
+                            let path = std::path::Path::new(&path_str);
                             let canonical_path = std::fs::canonicalize(path).map_err(|e| {
                                 format!("Modül yolu çözümlenemedi ({}): {}", path_str, e)
                             })?;
@@ -131,7 +133,6 @@ impl TypeChecker {
                             (canonical_path, read_content)
                         };
 
-                        // 1. Döngüsel Bağımlılık Kontrolü
                         if self.loading_stack.contains(&canonical_path) {
                             return Err(format!(
                                 "Tip Hatası: Döngüsel bağımlılık tespit edildi: {}",
@@ -139,12 +140,10 @@ impl TypeChecker {
                             ));
                         }
 
-                        // 2. Çift Dahil Etme Kontrolü (Include Guard)
                         if self.loaded_files.contains(&canonical_path) {
                             return Ok(Type::Bos);
                         }
 
-                        // Yükleme stack'ine ekle
                         self.loading_stack.push(canonical_path.clone());
 
                         use logos::Logos;
@@ -163,11 +162,41 @@ impl TypeChecker {
                         let ast = crate::parse_tokens(tokens, content.len())
                             .map_err(|e| format!("Ayrıştırma hatası: {:?}", e))?;
 
+                        let has_namespace_prefix = if path_str.starts_with("std::") {
+                            Some(path_str.split("::").map(|s| s.to_string()).collect::<Vec<String>>())
+                        } else {
+                            None
+                        };
+
+                        let mut module_env = create_default_type_env(self);
                         for stmt in &ast {
-                            self.infer_stmt(stmt, env, current_ret_ty)?;
+                            self.infer_stmt(stmt, &mut module_env, current_ret_ty)?;
                         }
 
-                        // Yükleme tamamlandı, stack'ten çıkar ve loaded_files'a ekle
+                        let mut current_env = Some(Box::new(module_env));
+                        while let Some(curr) = current_env {
+                            for (name, scheme) in curr.bindings.clone() {
+                                let is_builtin = match name.as_str() {
+                                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                    _ => false,
+                                };
+                                if is_builtin {
+                                    continue;
+                                }
+                                if name.contains("::") {
+                                    env.set(name, scheme);
+                                } else {
+                                    let bound_name = if let Some(ref p) = has_namespace_prefix {
+                                        format!("{}::{}", p.join("::"), name)
+                                    } else {
+                                        name
+                                    };
+                                    env.set(bound_name, scheme);
+                                }
+                            }
+                            current_env = curr.parent;
+                        }
+
                         self.loading_stack.pop();
                         self.loaded_files.insert(canonical_path);
 
@@ -177,7 +206,7 @@ impl TypeChecker {
                     }
                 }
 
-                if name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir" {
+                if prefix.is_none() && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir") {
                     if args.is_empty() {
                         return Err(
                             "Tip Hatası: arkaplanda_çalıştır en az bir argüman almalıdır"
@@ -198,9 +227,27 @@ impl TypeChecker {
                     return Ok(Type::Task(Box::new(self.resolve(&Type::Var(ret_var)))));
                 }
 
+                let lookup_name = if let Some(p) = prefix {
+                    format!("{}::{}", p.join("::"), name)
+                } else {
+                    name.clone()
+                };
+
                 let fn_scheme = env
-                    .get(name)
-                    .ok_or_else(|| format!("Tip Hatası: Tanımlanamayan işlev '{}'", name))?;
+                    .get(&lookup_name)
+                    .or_else(|| {
+                        // fallback to name without prefix if name starts with standard lib prefix but was parsed without it? No, if name is a builtin
+                        let is_builtin = match name.as_str() {
+                            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                            _ => false,
+                        };
+                        if is_builtin {
+                            env.get(name)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| format!("Tip Hatası: Tanımlanamayan işlev '{}'", lookup_name))?;
                 let fn_ty = self.instantiate(&fn_scheme);
 
                 let mut arg_tys = Vec::new();
@@ -386,18 +433,58 @@ impl TypeChecker {
                     self.infer_stmt(s, &mut body_env, current_ret_ty)?;
                 }
             }
-            Statement::FnDecl { name, params, body } => {
-                let ret_var = self.new_var();
-                let ret_ty = Type::Var(ret_var);
+            Statement::FnDecl { name, generics, params, return_type, body } => {
+                let ret_ty = if let Some(ret_str) = return_type {
+                    // Resolve explicit type. For simple parser, parse string type names:
+                    // e.g. "Sayı?", "Sayı", "Metin", etc.
+                    let is_nullable = ret_str.ends_with('?');
+                    let base_name = if is_nullable { &ret_str[0..ret_str.len()-1] } else { ret_str.as_str() };
+                    let base_ty = match base_name {
+                        "Sayı" | "sayı" => Type::Number,
+                        "Metin" | "metin" => Type::String,
+                        "Mantıksal" | "mantıksal" => Type::Boolean,
+                        "Boş" | "boş" => Type::Bos,
+                        _ => {
+                            if generics.contains(&base_name.to_string()) {
+                                Type::Generic(base_name.to_string())
+                            } else {
+                                Type::Var(self.new_var())
+                            }
+                        }
+                    };
+                    if is_nullable { Type::Option(Box::new(base_ty)) } else { base_ty }
+                } else {
+                    let ret_var = self.new_var();
+                    Type::Var(ret_var)
+                };
 
                 let mut param_tys = Vec::new();
                 let mut body_env = TypeEnv::extend(env);
-                for p in params {
-                    let p_var = self.new_var();
-                    let p_ty = Type::Var(p_var);
+                for (p_name, p_type_str_opt) in params {
+                    let p_ty = if let Some(p_type_str) = p_type_str_opt {
+                        let is_nullable = p_type_str.ends_with('?');
+                        let base_name = if is_nullable { &p_type_str[0..p_type_str.len()-1] } else { p_type_str.as_str() };
+                        let base_ty = match base_name {
+                            "Sayı" | "sayı" => Type::Number,
+                            "Metin" | "metin" => Type::String,
+                            "Mantıksal" | "mantıksal" => Type::Boolean,
+                            "Boş" | "boş" => Type::Bos,
+                            _ => {
+                                if generics.contains(&base_name.to_string()) {
+                                    Type::Generic(base_name.to_string())
+                                } else {
+                                    Type::Var(self.new_var())
+                                }
+                            }
+                        };
+                        if is_nullable { Type::Option(Box::new(base_ty)) } else { base_ty }
+                    } else {
+                        let p_var = self.new_var();
+                        Type::Var(p_var)
+                    };
                     param_tys.push(p_ty.clone());
                     body_env.set(
-                        p.clone(),
+                        p_name.clone(),
                         Scheme {
                             vars: vec![],
                             ty: p_ty,

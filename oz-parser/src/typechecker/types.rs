@@ -12,6 +12,8 @@ pub enum Type {
     Task(Box<Type>),
     Var(usize),
     Hata,
+    Option(Box<Type>),
+    Generic(String),
 }
 
 #[derive(Clone, Debug)]
