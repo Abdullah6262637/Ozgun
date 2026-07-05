@@ -453,12 +453,14 @@ impl Compiler {
             }
             Expr::InterpolatedString(parts) => {
                 if parts.is_empty() {
-                    self.instructions.push(Instruction::Constant(Val::String(String::new())));
+                    self.instructions
+                        .push(Instruction::Constant(Val::String(String::new())));
                 } else {
                     for (i, part) in parts.iter().enumerate() {
                         match part {
                             oz_parser::ast::InterpolatedPart::Text(s) => {
-                                self.instructions.push(Instruction::Constant(Val::String(s.clone())));
+                                self.instructions
+                                    .push(Instruction::Constant(Val::String(s.clone())));
                             }
                             oz_parser::ast::InterpolatedPart::Expr(e) => {
                                 self.compile_expr(e)?;

@@ -34,7 +34,9 @@ fn desugar_stmt(stmt: &mut Spanned<Statement>) -> Result<(), String> {
                 desugar_stmt(s)?;
             }
         }
-        Statement::For { start, end, body, .. } => {
+        Statement::For {
+            start, end, body, ..
+        } => {
             desugar_expr(start)?;
             desugar_expr(end)?;
             for s in body {
@@ -104,7 +106,9 @@ fn desugar_expr(expr: &mut Spanned<Expr>) -> Result<(), String> {
         Expr::Literal(Literal::String(s)) => {
             if s.contains('{') {
                 let parts = parse_interpolation_content(s, expr.span.start + 1)?;
-                if !parts.is_empty() && (parts.len() > 1 || matches!(parts.first(), Some(InterpolatedPart::Expr(_)))) {
+                if !parts.is_empty()
+                    && (parts.len() > 1 || matches!(parts.first(), Some(InterpolatedPart::Expr(_))))
+                {
                     expr.node = Expr::InterpolatedString(parts);
                 }
             }
@@ -120,7 +124,10 @@ fn desugar_expr(expr: &mut Spanned<Expr>) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_interpolation_content(s: &str, start_offset: usize) -> Result<Vec<InterpolatedPart>, String> {
+fn parse_interpolation_content(
+    s: &str,
+    start_offset: usize,
+) -> Result<Vec<InterpolatedPart>, String> {
     let mut parts = Vec::new();
     let mut chars = s.char_indices().peekable();
     let mut current_text = String::new();
@@ -148,11 +155,11 @@ fn parse_interpolation_content(s: &str, start_offset: usize) -> Result<Vec<Inter
                 parts.push(InterpolatedPart::Text(current_text.clone()));
                 current_text.clear();
             }
-            
+
             let mut expr_str = String::new();
             let mut brace_depth = 1;
             let expr_start = i + 1;
-            
+
             while let Some((j, ec)) = chars.next() {
                 if ec == '{' {
                     brace_depth += 1;
@@ -168,14 +175,20 @@ fn parse_interpolation_content(s: &str, start_offset: usize) -> Result<Vec<Inter
                     expr_str.push(ec);
                 }
             }
-            
+
             if brace_depth != 0 {
-                return Err(format!("Hata: Süslü parantez kapatılmamış (karakter no: {})", start_offset + i));
+                return Err(format!(
+                    "Hata: Süslü parantez kapatılmamış (karakter no: {})",
+                    start_offset + i
+                ));
             }
             if expr_str.trim().is_empty() {
-                return Err(format!("Hata: Boş interpolasyon {{}} kullanılamaz (karakter no: {})", start_offset + i));
+                return Err(format!(
+                    "Hata: Boş interpolasyon {{}} kullanılamaz (karakter no: {})",
+                    start_offset + i
+                ));
             }
-            
+
             let inner_offset = start_offset + expr_start;
             let parsed_expr = parse_expr_source(&expr_str, inner_offset)?;
             parts.push(InterpolatedPart::Expr(Box::new(parsed_expr)));

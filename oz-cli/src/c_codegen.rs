@@ -344,7 +344,9 @@ impl CCodegen {
                 unimplemented!("Metin içi değişken (String Interpolation) C Backend tarafında henüz desteklenmemektedir.");
             }
             Expr::Lambda { .. } => {
-                unimplemented!("Anonim fonksiyonlar (Lambda) C Backend tarafında henüz desteklenmemektedir.");
+                unimplemented!(
+                    "Anonim fonksiyonlar (Lambda) C Backend tarafında henüz desteklenmemektedir."
+                );
             }
         }
     }

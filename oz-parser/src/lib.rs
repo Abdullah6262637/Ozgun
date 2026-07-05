@@ -70,12 +70,12 @@ fn expr_parser(
             .ignore_then(
                 ident_parser()
                     .separated_by(just(Token::Comma))
-                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .delimited_by(just(Token::LParen), just(Token::RParen)),
             )
             .then(
                 stmt.clone()
                     .repeated()
-                    .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                    .delimited_by(just(Token::LBrace), just(Token::RBrace)),
             )
             .map(|(params, body)| Expr::Lambda { params, body })
             .map_with_span(Spanned::new);
@@ -410,19 +410,22 @@ pub fn parse_expr_source(src: &str, offset: usize) -> Result<Spanned<Expr>, Stri
             let shifted_span = (span.start + offset)..(span.end + offset);
             tokens.push((token, shifted_span));
         } else {
-            return Err(format!("Sözcüksel analiz hatası (karakter no: {})", span.start + offset));
+            return Err(format!(
+                "Sözcüksel analiz hatası (karakter no: {})",
+                span.start + offset
+            ));
         }
     }
     let len = src.len();
-    
+
     // We need statement parser to build expr parser
     let stmt_parser = statement_parser();
     let parser = expr_parser(stmt_parser).then_ignore(end());
     let stream = chumsky::Stream::from_iter(offset..(offset + len), tokens.into_iter());
-    
-    parser.parse(stream).map_err(|errs| {
-        format!("Ayrıştırma hatası: {:?}", errs)
-    })
+
+    parser
+        .parse(stream)
+        .map_err(|errs| format!("Ayrıştırma hatası: {:?}", errs))
 }
 
 pub fn parse_tokens(
