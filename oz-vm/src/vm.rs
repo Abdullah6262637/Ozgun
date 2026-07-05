@@ -460,11 +460,30 @@ impl VM {
                                 if call_args.len() >= 1 {
                                     let func = call_args[0].clone();
                                     let func_args = call_args[1..].to_vec();
+                                    let run_res = match &func {
+                                        Val::Function { name: _, param_count: _, entry_ip } => {
+                                            let mut sub_vm = VM::new(self.instructions.clone());
+                                            sub_vm.globals = self.globals.clone();
+                                            for arg in &func_args {
+                                                sub_vm.stack.push(arg.clone());
+                                            }
+                                            sub_vm.frames.push(Frame {
+                                                return_address: self.instructions.len(),
+                                                slots: Vec::new(),
+                                            });
+                                            sub_vm.ip = *entry_ip;
+                                            sub_vm.run()?;
+                                            let res = sub_vm.stack.pop().unwrap_or(Val::Bos);
+                                            self.globals = sub_vm.globals;
+                                            res
+                                        }
+                                        _ => Val::Bos,
+                                    };
                                     self.stack.push(Val::Task(Rc::new(RefCell::new(TaskState {
-                                        completed: false,
+                                        completed: true,
                                         func,
                                         args: func_args,
-                                        result: Val::Bos,
+                                        result: run_res,
                                     }))));
                                 } else {
                                     self.stack.push(Val::Hata(
@@ -610,9 +629,17 @@ impl VM {
                                 )
                             }
                         },
+                        Val::Channel(ch) => {
+                            let mut items = ch.borrow_mut();
+                            if let Some(v) = items.pop_front() {
+                                self.stack.push(v);
+                            } else {
+                                self.stack.push(Val::Bos);
+                            }
+                        }
                         _ => {
                             return Err(
-                                "HATA: Sadece diziler ve haritalar indekslenebilir".to_string()
+                                "HATA: Sadece diziler, haritalar ve kanallar indekslenebilir".to_string()
                             )
                         }
                     }
@@ -647,9 +674,12 @@ impl VM {
                                 )
                             }
                         },
+                        Val::Channel(ch) => {
+                            ch.borrow_mut().push_back(val);
+                        }
                         _ => {
                             return Err(
-                                "HATA: Sadece diziler ve haritalar güncellenebilir".to_string()
+                                "HATA: Sadece diziler, haritalar ve kanallar güncellenebilir".to_string()
                             )
                         }
                     }
@@ -909,6 +939,32 @@ impl VM {
                         other => {
                             self.stack.push(other);
                         }
+                    }
+                }
+                Instruction::MakeChannel => {
+                    self.stack.push(Val::Channel(Rc::new(RefCell::new(std::collections::VecDeque::new()))));
+                }
+                Instruction::ChannelSend => {
+                    let val = self.stack.pop().ok_or("HATA: Yığın boş (ChannelSend val)")?;
+                    let ch_val = self.stack.pop().ok_or("HATA: Yığın boş (ChannelSend ch)")?;
+                    if let Val::Channel(ch) = ch_val {
+                        ch.borrow_mut().push_back(val);
+                        self.stack.push(Val::Bos);
+                    } else {
+                        return Err("HATA: Gönderim işlemi sadece kanallar üzerinde yapılabilir".to_string());
+                    }
+                }
+                Instruction::ChannelReceive => {
+                    let ch_val = self.stack.pop().ok_or("HATA: Yığın boş (ChannelReceive ch)")?;
+                    if let Val::Channel(ch) = ch_val {
+                        let mut items = ch.borrow_mut();
+                        if let Some(val) = items.pop_front() {
+                            self.stack.push(val);
+                        } else {
+                            self.stack.push(Val::Bos);
+                        }
+                    } else {
+                        return Err("HATA: Alım işlemi sadece kanallar üzerinde yapılabilir".to_string());
                     }
                 }
             }

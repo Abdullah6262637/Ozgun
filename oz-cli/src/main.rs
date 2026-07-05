@@ -476,12 +476,11 @@ giris = "kaynak/ana.oz"
                         print!("Test çalıştırılıyor: {}... ", path.display());
                         match run_file(&path) {
                             Ok(_) => {
-                                println!("GEÇTİ");
+                                println!("\x1b[32m[GEÇTİ]\x1b[0m");
                                 passed += 1;
                             }
                             Err(e) => {
-                                println!("BAŞARISIZ");
-                                eprintln!("  Hata detayı: {}", e);
+                                println!("\x1b[31m[KALDI]\x1b[0m: {}", e);
                                 failed += 1;
                             }
                         }

@@ -10,6 +10,7 @@ pub enum Type {
     Map(Box<Type>),
     Function { params: Vec<Type>, ret: Box<Type> },
     Task(Box<Type>),
+    Channel(Box<Type>),
     Var(usize),
     Hata,
     Option(Box<Type>),

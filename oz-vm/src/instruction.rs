@@ -17,6 +17,7 @@ pub enum Val {
     Map(Rc<RefCell<std::collections::HashMap<String, Val>>>),
     Hata(String),
     Task(Rc<RefCell<TaskState>>),
+    Channel(Rc<RefCell<std::collections::VecDeque<Val>>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,4 +65,7 @@ pub enum Instruction {
     Not,
     JumpIfFalseKeep(usize),
     JumpIfTrueKeep(usize),
+    MakeChannel,
+    ChannelSend,
+    ChannelReceive,
 }

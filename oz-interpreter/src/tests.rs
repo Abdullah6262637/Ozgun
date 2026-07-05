@@ -425,3 +425,29 @@ fn test_dosya_sonuc_hata_yonetimi() {
     assert_eq!(env.get("silme_durumu"), Some(Val::String("basarili".to_string())));
 }
 
+#[test]
+fn test_kanallar_ve_eszamanlilik() {
+    let src = r#"
+        iletim = kanal();
+        
+        işlev veri_uret(k) {
+            k[0] = 42;
+            k[0] = 99;
+            döndür boş;
+        }
+        
+        gorev = arkaplanda_çalıştır(veri_uret, iletim);
+        
+        // Non-blocking pop-front via index read
+        deger_ilk = iletim[0];
+        deger_ikinci = iletim[0];
+        deger_ucuncu = iletim[0];
+    "#;
+    let res = run_src(src);
+    assert!(res.is_ok(), "Hata: {:?}", res.as_ref().err());
+    let (_, env) = res.unwrap();
+    assert_eq!(env.get("deger_ilk"), Some(Val::Number(42.0)));
+    assert_eq!(env.get("deger_ikinci"), Some(Val::Number(99.0)));
+    assert_eq!(env.get("deger_ucuncu"), Some(Val::Bos));
+}
+

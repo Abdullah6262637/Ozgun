@@ -15,6 +15,7 @@ impl TypeChecker {
             Type::Array(inner) => Type::Array(Box::new(self.resolve(inner))),
             Type::Map(inner) => Type::Map(Box::new(self.resolve(inner))),
             Type::Task(inner) => Type::Task(Box::new(self.resolve(inner))),
+            Type::Channel(inner) => Type::Channel(Box::new(self.resolve(inner))),
             Type::Option(inner) => Type::Option(Box::new(self.resolve(inner))),
             Type::Function { params, ret } => Type::Function {
                 params: params.iter().map(|t| self.resolve(t)).collect(),
@@ -28,7 +29,7 @@ impl TypeChecker {
         let resolved = self.resolve(ty);
         match resolved {
             Type::Var(id) => var_id == id,
-            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Option(inner) => {
+            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Channel(inner) | Type::Option(inner) => {
                 self.occurs_in(var_id, &inner)
             }
             Type::Function { params, ret } => {
@@ -62,6 +63,7 @@ impl TypeChecker {
             (Type::Array(inner1), Type::Array(inner2)) => self.unify(inner1, inner2),
             (Type::Map(inner1), Type::Map(inner2)) => self.unify(inner1, inner2),
             (Type::Task(inner1), Type::Task(inner2)) => self.unify(inner1, inner2),
+            (Type::Channel(inner1), Type::Channel(inner2)) => self.unify(inner1, inner2),
             (Type::Option(inner1), Type::Option(inner2)) => self.unify(inner1, inner2),
             (Type::Option(_), Type::Bos) => Ok(()),
             (Type::Bos, Type::Option(_)) => Ok(()),
@@ -108,7 +110,7 @@ impl TypeChecker {
                     vars.insert(*id);
                 }
             }
-            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Option(inner) => {
+            Type::Array(inner) | Type::Map(inner) | Type::Task(inner) | Type::Channel(inner) | Type::Option(inner) => {
                 self.collect_free_vars(inner, vars);
             }
             Type::Function { params, ret } => {
@@ -166,6 +168,7 @@ impl TypeChecker {
                 Type::Array(inner) => Type::Array(Box::new(subst(inner, mapping))),
                 Type::Map(inner) => Type::Map(Box::new(subst(inner, mapping))),
                 Type::Task(inner) => Type::Task(Box::new(subst(inner, mapping))),
+                Type::Channel(inner) => Type::Channel(Box::new(subst(inner, mapping))),
                 Type::Option(inner) => Type::Option(Box::new(subst(inner, mapping))),
                 Type::Function { params, ret } => Type::Function {
                     params: params.iter().map(|p| subst(p, mapping)).collect(),

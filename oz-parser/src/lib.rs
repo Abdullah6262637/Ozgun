@@ -118,7 +118,7 @@ fn expr_parser(
                     .then_ignore(suffix_parser(&["elemanı", "elemani", "değeri", "degeri"])),
             )
             .or(
-                suffix_parser(&["in", "ın", "un", "ün", "nin", "nın", "nun", "nün"]).ignore_then(
+                suffix_parser(&["in", "ın", "un", "ün", "nin", "nın", "nun", "nün", "de", "da", "te", "ta", "yi", "yı", "yu", "yü"]).ignore_then(
                     ident_parser().map_with_span(|name, span| {
                         Spanned::new(Expr::Literal(Literal::String(name)), span)
                     }),
@@ -146,8 +146,8 @@ fn expr_parser(
             .to(BinaryOp::Mul)
             .or(just(Token::Div).to(BinaryOp::Div))
             .or(just(Token::Mod).to(BinaryOp::Mod));
-        let factor = unary
-            .then(op_mul.then(expr.clone()).repeated())
+        let factor = unary.clone()
+            .then(op_mul.then(unary).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
                 Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
@@ -157,8 +157,8 @@ fn expr_parser(
         let op_add = just(Token::Plus)
             .to(BinaryOp::Add)
             .or(just(Token::Minus).to(BinaryOp::Sub));
-        let term = factor
-            .then(op_add.then(expr.clone()).repeated())
+        let term = factor.clone()
+            .then(op_add.then(factor).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
                 Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
@@ -173,7 +173,7 @@ fn expr_parser(
             .or(just(Token::Lt).to(BinaryOp::Lt))
             .or(just(Token::Gt).to(BinaryOp::Gt));
         let comparison =
-            term.then(op_comp.then(expr.clone()).repeated())
+            term.clone().then(op_comp.then(term).repeated())
                 .foldl(|lhs, (op, rhs)| {
                     let span = lhs.span.start..rhs.span.end;
                     Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)
@@ -183,8 +183,8 @@ fn expr_parser(
         let op_logical = just(Token::And)
             .to(BinaryOp::And)
             .or(just(Token::Or).to(BinaryOp::Or));
-        let base_expr = comparison
-            .then(op_logical.then(expr.clone()).repeated())
+        let base_expr = comparison.clone()
+            .then(op_logical.then(comparison).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let span = lhs.span.start..rhs.span.end;
                 Spanned::new(Expr::Binary(Box::new(lhs), op, Box::new(rhs)), span)

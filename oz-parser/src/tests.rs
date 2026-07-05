@@ -73,3 +73,17 @@ fn test_null_safety() {
     let check_res = typechecker::check_program(&ast);
     assert!(check_res.is_ok(), "Tip denetimi hatası: {:?}", check_res);
 }
+
+#[test]
+fn test_turkce_ekler() {
+    let src = r#"
+        ogrenci = {};
+        ogrenci["ad"] = "Ali";
+        ad_deger1 = ogrenci'yi ad;
+        ad_deger2 = ogrenci'de ad;
+    "#;
+    let res = parse_helper(src);
+    assert!(res.is_ok(), "Türkçe durum ekleri ayrıştırma hatası: {:?}", res);
+    let ast = res.unwrap();
+    assert_eq!(ast.len(), 4);
+}

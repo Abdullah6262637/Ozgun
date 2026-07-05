@@ -19,6 +19,7 @@ pub enum Val {
     Map(Rc<RefCell<HashMap<String, Val>>>),
     Hata(String),
     Task(Rc<RefCell<TaskState>>),
+    Channel(Rc<RefCell<std::collections::VecDeque<Val>>>),
     Return(Box<Val>),
 }
 
@@ -63,6 +64,7 @@ impl std::fmt::Debug for Val {
             }
             Val::Hata(msg) => write!(f, "Hata({:?})", msg),
             Val::Task(_) => write!(f, "Task"),
+            Val::Channel(_) => write!(f, "Channel"),
             Val::Return(v) => write!(f, "Return({:?})", v),
         }
     }
@@ -79,6 +81,7 @@ impl PartialEq for Val {
             (Val::Map(a), Val::Map(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Val::Hata(a), Val::Hata(b)) => a == b,
             (Val::Task(a), Val::Task(b)) => Rc::ptr_eq(a, b),
+            (Val::Channel(a), Val::Channel(b)) => Rc::ptr_eq(a, b),
             (Val::Return(a), Val::Return(b)) => a == b,
             _ => false,
         }

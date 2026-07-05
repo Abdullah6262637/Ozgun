@@ -37,7 +37,7 @@ impl Compiler {
             }
         }
         let is_builtin = match name {
-            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
             _ => {
                 let name_without_prefix = if name.contains("::") {
                     name.split("::").last().unwrap_or(name)
@@ -45,7 +45,7 @@ impl Compiler {
                     name
                 };
                 match name_without_prefix {
-                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
                     _ => false,
                 }
             }
@@ -84,7 +84,7 @@ impl Compiler {
             VarRef::Local(slot)
         } else {
             let is_builtin = match name {
-                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
                 _ => false,
             };
             let resolved_name = if let Some(ref ns) = self.current_namespace {
@@ -276,11 +276,16 @@ impl Compiler {
                     name.clone()
                 };
 
-                match self.get_variable(&lookup_name) {
-                    VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
-                    VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                let is_kanal_builtin = prefix.is_none() && name == "kanal";
+                if is_kanal_builtin {
+                    self.instructions.push(Instruction::MakeChannel);
+                } else {
+                    match self.get_variable(&lookup_name) {
+                        VarRef::Local(slot) => self.instructions.push(Instruction::LoadLocal(slot)),
+                        VarRef::Global(slot) => self.instructions.push(Instruction::LoadGlobal(slot)),
+                    }
+                    self.instructions.push(Instruction::Call(args.len()));
                 }
-                self.instructions.push(Instruction::Call(args.len()));
             }
             Expr::Array(elements) => {
                 for el in elements {

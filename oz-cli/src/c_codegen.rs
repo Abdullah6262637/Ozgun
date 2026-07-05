@@ -39,10 +39,18 @@ typedef enum {
     VAL_BOOLEAN,
     VAL_ARRAY,
     VAL_MAP,
+    VAL_CHANNEL,
     VAL_HATA
 } TilkType;
 
 struct TilkVal;
+
+typedef struct {
+    struct TilkVal* data;
+    size_t front;
+    size_t back;
+    size_t capacity;
+} TilkChannel;
 
 typedef struct {
     struct TilkVal* data;
@@ -65,6 +73,7 @@ typedef struct TilkVal {
         bool boolean;
         TilkArray array;
         TilkMap map;
+        TilkChannel channel;
         char* error;
     } val;
 } TilkVal;
@@ -200,6 +209,16 @@ TilkVal uyku(TilkVal ms) {
     return make_bos();
 }
 
+TilkVal kanal() {
+    TilkVal v;
+    v.type = VAL_CHANNEL;
+    v.val.channel.data = malloc(4 * sizeof(TilkVal));
+    v.val.channel.front = 0;
+    v.val.channel.back = 0;
+    v.val.channel.capacity = 4;
+    return v;
+}
+
 TilkVal dosya_oku(TilkVal path) {
     if (path.type != VAL_STRING) return make_hata("Dosya yolu metin olmalıdır");
     FILE* f = fopen(path.val.string, "r");
@@ -311,6 +330,13 @@ TilkVal index_val(TilkVal target, TilkVal idx) {
         }
         return make_bos();
     }
+    if (target.type == VAL_CHANNEL) {
+        TilkChannel* c = &target.val.channel;
+        if (c->front == c->back) return make_bos();
+        TilkVal val = c->data[c->front];
+        c->front++;
+        return val;
+    }
     return make_hata("İndeksleme hatası");
 }
 
@@ -338,6 +364,15 @@ TilkVal index_assign(TilkVal target, TilkVal idx, TilkVal val) {
         }
         m->keys[m->len] = strdup(idx.val.string);
         m->values[m->len++] = val;
+        return make_bos();
+    }
+    if (target.type == VAL_CHANNEL) {
+        TilkChannel* c = &target.val.channel;
+        if (c->back >= c->capacity) {
+            c->capacity *= 2;
+            c->data = realloc(c->data, c->capacity * sizeof(TilkVal));
+        }
+        c->data[c->back++] = val;
         return make_bos();
     }
     return make_hata("İndeksleme hatası");
@@ -807,5 +842,27 @@ mod tests {
         assert!(c_code.contains("TilkVal sayi = make_number(42);"));
         assert!(c_code.contains("TilkVal topla(TilkVal a, TilkVal b)"));
         assert!(c_code.contains("sonuc = topla(sayi, make_number(8))"));
+    }
+
+    #[test]
+    fn test_codegen_channels() {
+        let src = r#"
+            iletim = kanal();
+            iletim[0] = 42;
+            deger = iletim[0];
+        "#;
+        let lexer = Token::lexer(src);
+        let mut tokens = Vec::new();
+        for (token_res, span) in lexer.spanned() {
+            if let Ok(token) = token_res {
+                tokens.push((token, span));
+            }
+        }
+        let ast = oz_parser::parse_tokens(tokens, src.len()).unwrap();
+        let codegen = CCodegen::new();
+        let c_code = codegen.transpile(&ast).unwrap();
+        assert!(c_code.contains("TilkVal iletim = kanal();"));
+        assert!(c_code.contains("index_assign(iletim, make_number(0), make_number(42));"));
+        assert!(c_code.contains("TilkVal deger = index_val(iletim, make_number(0));"));
     }
 }

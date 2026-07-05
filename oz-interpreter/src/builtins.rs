@@ -192,5 +192,13 @@ pub fn create_global_env() -> Env {
         })),
     );
 
+    // Built-in function "kanal"
+    env.set(
+        "kanal".to_string(),
+        Val::Builtin(Rc::new(|_args| {
+            Val::Channel(Rc::new(RefCell::new(std::collections::VecDeque::new())))
+        })),
+    );
+
     env
 }

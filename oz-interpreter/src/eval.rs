@@ -164,7 +164,7 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                         let prefix_str = p.join("::");
                         for (k, v) in module_env.get_bindings().into_iter() {
                             let is_builtin = match k.as_str() {
-                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
                                 _ => false,
                             };
                             if is_builtin {
@@ -179,7 +179,7 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     } else {
                         for (k, v) in module_env.get_bindings().into_iter() {
                             let is_builtin = match k.as_str() {
-                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
                                 _ => false,
                             };
                             if is_builtin {
@@ -208,7 +208,7 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                 .get(&lookup_name)
                 .or_else(|| {
                     let is_builtin = match name.as_str() {
-                        "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" => true,
+                        "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "kanal" => true,
                         _ => false,
                     };
                     if is_builtin {
@@ -225,6 +225,30 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     Ok(v) => evaluated_args.push(v),
                     Err(e) => return Ok(Val::Hata(e)),
                 }
+            }
+
+            let is_calistir = prefix.is_none() && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir");
+            if is_calistir && !evaluated_args.is_empty() {
+                let func_to_run = evaluated_args[0].clone();
+                let task_args = evaluated_args[1..].to_vec();
+                let run_res = match &func_to_run {
+                    Val::Function { params, body } => {
+                        let child_env = Env::extend(env);
+                        for (param, val) in params.iter().zip(&task_args) {
+                            child_env.set(param.clone(), val.clone());
+                        }
+                        let ret = eval_program(body, &child_env)?;
+                        ret.unwrap_or(Val::Bos)
+                    }
+                    Val::Builtin(f) => f(task_args.clone()),
+                    _ => Val::Bos,
+                };
+                return Ok(Val::Task(Rc::new(RefCell::new(crate::val::TaskState {
+                    completed: true,
+                    func: func_to_run,
+                    args: task_args,
+                    result: run_res,
+                }))));
             }
 
             match func {
@@ -312,7 +336,15 @@ pub fn eval_expr(expr: &Spanned<Expr>, env: &Env) -> Result<Val, String> {
                     }
                     _ => Err("HATA: Harita indeksi metin (string) olmak zorundadır".to_string()),
                 },
-                _ => Err("HATA: Sadece diziler ve haritalar indekslenebilir".to_string()),
+                Val::Channel(ch) => {
+                    let mut items = ch.borrow_mut();
+                    if let Some(val) = items.pop_front() {
+                        Ok(val)
+                    } else {
+                        Ok(Val::Bos)
+                    }
+                }
+                _ => Err("HATA: Sadece diziler, haritalar ve kanallar indekslenebilir".to_string()),
             }
         }
         Expr::HataIse(base, body) => {
@@ -402,7 +434,11 @@ pub fn eval_stmt(stmt: &Spanned<Statement>, env: &Env) -> Result<Option<Val>, St
                     }
                     _ => Err("HATA: Harita indeksi metin (string) olmak zorundadır".to_string()),
                 },
-                _ => Err("HATA: Sadece diziler ve haritalar güncellenebilir".to_string()),
+                Val::Channel(ch) => {
+                    ch.borrow_mut().push_back(value_val);
+                    Ok(None)
+                }
+                _ => Err("HATA: Sadece diziler, haritalar ve kanallar güncellenebilir".to_string()),
             }
         }
         Statement::If(cond, then_block, else_block) => {

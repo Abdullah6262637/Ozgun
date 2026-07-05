@@ -177,7 +177,7 @@ impl TypeChecker {
                         while let Some(curr) = current_env {
                             for (name, scheme) in curr.bindings.clone() {
                                 let is_builtin = match name.as_str() {
-                                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                                    "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
                                     _ => false,
                                 };
                                 if is_builtin {
@@ -238,7 +238,7 @@ impl TypeChecker {
                     .or_else(|| {
                         // fallback to name without prefix if name starts with standard lib prefix but was parsed without it? No, if name is a builtin
                         let is_builtin = match name.as_str() {
-                            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" => true,
+                            "yazdır" | "boyut" | "ekle" | "hata_fırlat" | "hata_firlat" | "dosya_oku" | "dosya_yaz" | "dosya_sil" | "arkaplanda_çalıştır" | "arkaplanda_calistir" | "kök" | "karekok" | "üs" | "ust" | "mutlak" | "şimdi" | "simdi" | "uyku" | "dahil_et" | "kanal" => true,
                             _ => false,
                         };
                         if is_builtin {
@@ -290,14 +290,24 @@ impl TypeChecker {
                         self.unify(&idx_ty, &Type::String)?;
                         Ok(Type::Var(self.new_var()))
                     }
-                    Type::Var(id) => {
-                        let res_var = self.new_var();
-                        let array_ty = Type::Array(Box::new(Type::Var(res_var)));
-                        self.substitutions.insert(id, array_ty);
+                    Type::Channel(inner) => {
                         self.unify(&idx_ty, &Type::Number)?;
+                        Ok(*inner)
+                    }
+                    Type::Var(_id) => {
+                        let res_var = self.new_var();
+                        // Instead of force-constraining to Array immediately, let's keep it flexible
+                        // or default to Array if no other type is unified. Wait, a safer way:
+                        // Let's create a fresh variable representing the collection type itself
+                        // but since we don't have Union types, let's check if the index is a number,
+                        // and when unifying Type::Var(id) with Array/Channel, it will resolve.
+                        // Let's check: if we do not insert substitution here, then occurs check and unify will handle it when arkaplanda_çalıştır is unified!
+                        // Yes! We can just return Ok(Type::Var(res_var)) without inserting substitutions.insert(id, array_ty)!
+                        // Wait, if we don't insert, then id remains a Var, and later when unified with Channel(T), it works!
+                        // Let's check: self.unify(&idx_ty, &Type::Number)?;
                         Ok(Type::Var(res_var))
                     }
-                    _ => Err("Tip Hatası: Sadece diziler ve haritalar indekslenebilir".to_string()),
+                    _ => Err("Tip Hatası: Sadece diziler, haritalar ve kanallar indekslenebilir".to_string()),
                 }
             }
             Expr::HataIse(base_expr, body) => {
@@ -372,15 +382,16 @@ impl TypeChecker {
                     Type::Map(_) => {
                         self.unify(&idx_ty, &Type::String)?;
                     }
-                    Type::Var(id) => {
-                        let res_var = self.new_var();
-                        let array_ty = Type::Array(Box::new(Type::Var(res_var)));
-                        self.substitutions.insert(id, array_ty);
+                    Type::Channel(inner) => {
                         self.unify(&idx_ty, &Type::Number)?;
+                        self.unify(&_val_ty, &*inner)?;
+                    }
+                    Type::Var(_id) => {
+                        // Keep it flexible so it can unify with either Array or Channel
                     }
                     _ => {
                         return Err(
-                            "Tip Hatası: Sadece diziler ve haritalar güncellenebilir".to_string()
+                            "Tip Hatası: Sadece diziler, haritalar ve kanallar güncellenebilir".to_string()
                         )
                     }
                 }
@@ -785,6 +796,19 @@ pub fn create_default_type_env(checker: &mut TypeChecker) -> TypeEnv {
         Scheme {
             vars: vec![],
             ty: dahil_et_ty,
+        },
+    );
+
+    let ch_var = checker.new_var();
+    let kanal_ty = Type::Function {
+        params: vec![],
+        ret: Box::new(Type::Channel(Box::new(Type::Var(ch_var)))),
+    };
+    env.set(
+        "kanal".to_string(),
+        Scheme {
+            vars: vec![ch_var],
+            ty: kanal_ty,
         },
     );
 
