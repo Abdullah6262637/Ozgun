@@ -716,7 +716,8 @@ impl VM {
                                 }
                                 let arg = self.stack.pop().unwrap();
                                 if let Val::String(s) = arg {
-                                    self.stack.push(Val::String(s.to_uppercase()));
+                                    self.stack
+                                        .push(Val::String(oz_lexer::turkish_uppercase(&s)));
                                 } else {
                                     self.stack.push(Val::Hata("Hata".into()));
                                 }
@@ -726,7 +727,8 @@ impl VM {
                                 }
                                 let arg = self.stack.pop().unwrap();
                                 if let Val::String(s) = arg {
-                                    self.stack.push(Val::String(s.to_lowercase()));
+                                    self.stack
+                                        .push(Val::String(oz_lexer::turkish_lowercase(&s)));
                                 } else {
                                     self.stack.push(Val::Hata("Hata".into()));
                                 }

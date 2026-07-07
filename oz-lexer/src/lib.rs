@@ -183,3 +183,21 @@ pub fn turkish_lowercase(s: &str) -> String {
     }
     result
 }
+
+/// Locale-independent Turkish uppercase normalization to avoid the "Turkish I" bug
+pub fn turkish_uppercase(s: &str) -> String {
+    let normalized: String = s.nfc().collect();
+    let mut result = String::with_capacity(normalized.len());
+    for c in normalized.chars() {
+        match c {
+            'i' => result.push('İ'),
+            'ı' => result.push('I'),
+            _ => {
+                for uc in c.to_uppercase() {
+                    result.push(uc);
+                }
+            }
+        }
+    }
+    result
+}

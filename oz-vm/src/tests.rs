@@ -345,6 +345,10 @@ fn test_golden_ornekler() {
         "../examples/ornek14_elif.oz",
         "../tests/golden/ornek14_elif.stdout",
     );
+    run_golden_test_file(
+        "../examples/ornek15_turkce_unicode.oz",
+        "../tests/golden/ornek15_turkce_unicode.stdout",
+    );
     // ornek8, 9, ve 10 zaman damgası/süre içerdiğinden deterministic golden teste uygun değil
 }
 

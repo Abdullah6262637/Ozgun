@@ -319,7 +319,7 @@ pub fn create_global_env() -> Env {
         Val::Builtin(Rc::new(|args| {
             if args.len() == 1 {
                 if let Val::String(s) = &args[0] {
-                    return Val::String(s.to_uppercase());
+                    return Val::String(oz_lexer::turkish_uppercase(s));
                 }
             }
             Val::Hata("Hata".into())
@@ -331,7 +331,7 @@ pub fn create_global_env() -> Env {
         Val::Builtin(Rc::new(|args| {
             if args.len() == 1 {
                 if let Val::String(s) = &args[0] {
-                    return Val::String(s.to_lowercase());
+                    return Val::String(oz_lexer::turkish_lowercase(s));
                 }
             }
             Val::Hata("Hata".into())
