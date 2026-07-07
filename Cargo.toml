@@ -7,7 +7,7 @@ members = [
     "oz-interpreter",
     "oz-vm",
     "oz-lsp"
-]
+, "oz-wasm"]
 
 [workspace.dependencies]
 logos = "0.14"
