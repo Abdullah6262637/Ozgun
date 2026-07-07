@@ -8,3 +8,6 @@ chumsky.workspace = true
 logos.workspace = true
 oz-lexer = { path = "../oz-lexer" }
 
+[dev-dependencies]
+proptest = "1.4"
+
