@@ -41,7 +41,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), String> {
+    pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), super::types::TypeError> {
         let t1 = self.resolve(t1);
         let t2 = self.resolve(t2);
         if t1 == t2 {
@@ -50,14 +50,14 @@ impl TypeChecker {
         match (&t1, &t2) {
             (Type::Var(id1), _) => {
                 if self.occurs_in(*id1, &t2) {
-                    return Err("Tip Hatası: Sonsuz tip (occurs check)".to_string());
+                    return Err(super::types::TypeError::new("Tip Hatası: Sonsuz tip (occurs check)"));
                 }
                 self.substitutions.insert(*id1, t2.clone());
                 Ok(())
             }
             (_, Type::Var(id2)) => {
                 if self.occurs_in(*id2, &t1) {
-                    return Err("Tip Hatası: Sonsuz tip (occurs check)".to_string());
+                    return Err(super::types::TypeError::new("Tip Hatası: Sonsuz tip (occurs check)"));
                 }
                 self.substitutions.insert(*id2, t1.clone());
                 Ok(())
@@ -82,17 +82,19 @@ impl TypeChecker {
                 },
             ) => {
                 if p1.len() != p2.len() {
-                    return Err("Tip Hatası: Fonksiyon argüman sayısı uyuşmuyor".to_string());
+                    return Err(super::types::TypeError::new("Tip Hatası: Fonksiyon argüman sayısı uyuşmuyor"));
                 }
                 for (p1_ty, p2_ty) in p1.iter().zip(p2.iter()) {
                     self.unify(p1_ty, p2_ty)?;
                 }
                 self.unify(r1, r2)
             }
-            _ => Err(format!(
+            _ => Err(super::types::TypeError::new(format!(
                 "Tip Hatası: {:?} ile {:?} tipleri birleştirilemiyor",
                 t1, t2
-            )),
+            ))
+            .with_expected(t1.clone())
+            .with_found(t2.clone())),
         }
     }
 

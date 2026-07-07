@@ -59,3 +59,62 @@ impl TypeEnv {
         self.bindings.insert(name, scheme);
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeError {
+    pub message: String,
+    pub span: Option<std::ops::Range<usize>>,
+    pub expected: Option<Type>,
+    pub found: Option<Type>,
+}
+
+impl TypeError {
+    pub fn new(message: impl Into<String>) -> Self {
+        TypeError {
+            message: message.into(),
+            span: None,
+            expected: None,
+            found: None,
+        }
+    }
+
+    pub fn with_span(mut self, span: std::ops::Range<usize>) -> Self {
+        self.span = Some(span);
+        self
+    }
+
+    pub fn with_expected(mut self, expected: Type) -> Self {
+        self.expected = Some(expected);
+        self
+    }
+
+    pub fn with_found(mut self, found: Type) -> Self {
+        self.found = Some(found);
+        self
+    }
+}
+
+impl std::fmt::Display for TypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl From<String> for TypeError {
+    fn from(msg: String) -> Self {
+        TypeError::new(msg)
+    }
+}
+
+impl From<&str> for TypeError {
+    fn from(msg: &str) -> Self {
+        TypeError::new(msg)
+    }
+}
+
+impl From<TypeError> for String {
+    fn from(val: TypeError) -> Self {
+        val.message
+    }
+}
+

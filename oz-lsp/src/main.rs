@@ -498,14 +498,14 @@ fn parse_and_diagnose(content: &str) -> Vec<Diagnostic> {
             let mut env = oz_parser::typechecker::create_default_type_env(&mut checker);
             for stmt in &ast {
                 if let Err(type_err) = checker.infer_stmt(stmt, &mut env, &None) {
-                    let range = find_error_range(content, &type_err);
+                    let range = find_error_range(content, &type_err.to_string());
                     diagnostics.push(Diagnostic {
                         range,
                         severity: Some(DiagnosticSeverity::ERROR),
                         code: None,
                         code_description: None,
                         source: Some("Tilk-TypeChecker".to_string()),
-                        message: type_err,
+                        message: type_err.to_string(),
                         related_information: None,
                         tags: None,
                         data: None,

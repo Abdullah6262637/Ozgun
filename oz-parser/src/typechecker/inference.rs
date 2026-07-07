@@ -3,6 +3,13 @@ use crate::ast::{BinaryOp, Expr, Literal, Spanned, Statement, UnaryOp};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+macro_rules! type_err {
+    ($($arg:tt)*) => {
+        super::types::TypeError::new(format!($($arg)*))
+    }
+}
+
+
 pub struct TypeChecker {
     pub next_var: usize,
     pub substitutions: HashMap<usize, Type>,
@@ -34,7 +41,7 @@ impl TypeChecker {
         expr: &Spanned<Expr>,
         env: &mut TypeEnv,
         current_ret_ty: &Option<Type>,
-    ) -> Result<Type, String> {
+    ) -> Result<Type, super::types::TypeError> {
         match &expr.node {
             Expr::Literal(lit) => match lit {
                 Literal::Number(_) => Ok(Type::Number),
@@ -54,7 +61,7 @@ impl TypeChecker {
                     self.recorded_types.insert(lookup_name.clone(), resolved);
                     Ok(instantiated)
                 } else {
-                    Err(format!(
+                    Err(type_err!(
                         "Tip Hatası: Tanımlanamayan değişken '{}'",
                         lookup_name
                     ))
@@ -120,7 +127,7 @@ impl TypeChecker {
             Expr::Call(prefix, name, args) => {
                 if prefix.is_none() && name == "dahil_et" {
                     if args.is_empty() {
-                        return Err("Tip Hatası: dahil_et en az bir argüman almalıdır".to_string());
+                        return Err(type_err!("Tip Hatası: dahil_et en az bir argüman almalıdır"));
                     }
                     if let Expr::Literal(Literal::String(path_str)) = &args[0].node {
                         let embedded_content = match path_str.as_str() {
@@ -149,7 +156,7 @@ impl TypeChecker {
                         };
 
                         if self.loading_stack.contains(&canonical_path) {
-                            return Err(format!(
+                            return Err(type_err!(
                                 "Tip Hatası: Döngüsel bağımlılık tespit edildi: {}",
                                 path_str
                             ));
@@ -169,7 +176,7 @@ impl TypeChecker {
                             match token_res {
                                 Ok(token) => tokens.push((token, span)),
                                 Err(_) => {
-                                    return Err(format!("Sözcüksel analiz hatası at {:?}", span))
+                                    return Err(type_err!("Sözcüksel analiz hatası at {:?}", span))
                                 }
                             }
                         }
@@ -253,7 +260,7 @@ impl TypeChecker {
 
                         return Ok(Type::Bos);
                     } else {
-                        return Err("Tip Hatası: dahil_et parametresi doğrudan metin (literal string) olmalıdır".to_string());
+                        return Err(type_err!("Tip Hatası: dahil_et parametresi doğrudan metin (literal string) olmalıdır"));
                     }
                 }
 
@@ -276,10 +283,7 @@ impl TypeChecker {
                     && (name == "arkaplanda_çalıştır" || name == "arkaplanda_calistir")
                 {
                     if args.is_empty() {
-                        return Err(
-                            "Tip Hatası: arkaplanda_çalıştır en az bir argüman almalıdır"
-                                .to_string(),
-                        );
+                        return Err(type_err!("Tip Hatası: arkaplanda_çalıştır en az bir argüman almalıdır"));
                     }
                     let fn_ty = self.infer_expr(&args[0], env, current_ret_ty)?;
                     let mut param_tys = Vec::new();
@@ -407,10 +411,7 @@ impl TypeChecker {
                         // Let's check: self.unify(&idx_ty, &Type::Number)?;
                         Ok(Type::Var(res_var))
                     }
-                    _ => Err(
-                        "Tip Hatası: Sadece diziler, haritalar ve kanallar indekslenebilir"
-                            .to_string(),
-                    ),
+                    _ => Err(type_err!("Tip Hatası: Sadece diziler, haritalar ve kanallar indekslenebilir")),
                 }
             }
             Expr::HataIse(base_expr, body) => {
@@ -483,7 +484,7 @@ impl TypeChecker {
         stmt: &Spanned<Statement>,
         env: &mut TypeEnv,
         current_ret_ty: &Option<Type>,
-    ) -> Result<(), String> {
+    ) -> Result<(), super::types::TypeError> {
         match &stmt.node {
             Statement::VarDecl(name, value) | Statement::Assignment(name, value) => {
                 let val_ty = self.infer_expr(value, env, current_ret_ty)?;
@@ -522,10 +523,7 @@ impl TypeChecker {
                         // Keep it flexible so it can unify with either Array or Channel
                     }
                     _ => {
-                        return Err(
-                            "Tip Hatası: Sadece diziler, haritalar ve kanallar güncellenebilir"
-                                .to_string(),
-                        )
+                        return Err(type_err!("Tip Hatası: Sadece diziler, haritalar ve kanallar güncellenebilir"));
                     }
                 }
             }
@@ -594,7 +592,7 @@ impl TypeChecker {
                         Type::Var(element_ty)
                     }
                     _ => {
-                        return Err("Tip Hatası: For-Each döngüsü sadece diziler ve metinler üzerinde kullanılabilir".to_string())
+                        return Err(type_err!("Tip Hatası: For-Each döngüsü sadece diziler ve metinler üzerinde kullanılabilir"))
                     }
                 };
 
@@ -1166,7 +1164,7 @@ pub fn create_default_type_env(checker: &mut TypeChecker) -> TypeEnv {
     env
 }
 
-pub fn check_program(stmts: &[Spanned<Statement>]) -> Result<(), String> {
+pub fn check_program(stmts: &[Spanned<Statement>]) -> Result<(), super::types::TypeError> {
     let mut checker = TypeChecker::new();
     let mut env = create_default_type_env(&mut checker);
     for stmt in stmts {
