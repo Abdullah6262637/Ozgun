@@ -1,4 +1,4 @@
-# TİLK Programlama Dili 🚀
+# TİLK Programlama Dili 
 
 [![CI](https://github.com/Abdullah6262637/Tilk/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdullah6262637/Tilk/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@ TİLK (`.oz`), Türkçenin sondan eklemeli (aglutinative) dilbilimsel çekirdeğ
 
 ---
 
-## ⚡ Hızlı Başlangıç
+##  Hızlı Başlangıç
 
 ### Kurulum
 
@@ -44,7 +44,7 @@ sayı > 10 ise {
 
 ---
 
-## 📌 İÇİNDEKİLER
+##  İÇİNDEKİLER
 
 1. [Dil Tasarım Felsefesi](#1-dil-tasarim-felsefesi)
 2. [EBNF Sözdizimi Şeması](#2-ebnf-sozdizimi-semasi)
@@ -200,10 +200,10 @@ Error: Sayı bekleniyordu
 
 TİLK, VS Code için sözdizimi renklendirmesi ve LSP desteği sunar:
 
-- 🎨 **Sözdizimi Renklendirmesi**: Anahtar kelimeler, yerleşik fonksiyonlar, metin ve sayılar
-- 📝 **Otomatik Tamamlama**: Yerleşik fonksiyonlar ve tanımlı değişkenler
-- 🔍 **Anlık Hata Gösterimi**: Sözcüksel, ayrıştırma ve tip hataları
-- 💡 **Hover Bilgisi**: Değişken tipleri üzerinde ipucu
+-  **Sözdizimi Renklendirmesi**: Anahtar kelimeler, yerleşik fonksiyonlar, metin ve sayılar
+-  **Otomatik Tamamlama**: Yerleşik fonksiyonlar ve tanımlı değişkenler
+-  **Anlık Hata Gösterimi**: Sözcüksel, ayrıştırma ve tip hataları
+-  **Hover Bilgisi**: Değişken tipleri üzerinde ipucu
 
 Eklenti dosyaları `editors/vscode/` dizininde bulunur.
 
@@ -258,19 +258,19 @@ cargo test --all
 
 ## 10. ÖZELLİKLER VE YOL HARİTASI
 
-### ✅ Çalışan Özellikler
+###  Çalışan Özellikler
 - **Modüler Mimari:** Lexer, Parser, HM Tip Denetimi, Bytecode Compiler, VM bağımsız modüller halindedir.
 - **Yerel Sözdizimi:** `ise`, `iken`, `den/e dek`, `her` gibi Türkçenin yapısına uygun özgün blok yapıları.
 - **Hata Yönetimi:** `hata_ise` ve `tamamlanınca` bloklarıyla Türkçe dilbilgisine uyan istisna yönetimi.
 - **Standart Kütüphane:** Dahili modüller `std/` dizini içinde yer alır (örn. `matematik`, `metin`, `zaman`).
 - **Paket Yöneticisi:** `tilk.lock` tabanlı sürüm ve checksum (md5) yönetimli bağımlılık kurulum aracı (`oz-cli yükle`).
 
-### 🧪 Deneysel Özellikler
+###  Deneysel Özellikler
 - **C Backend Transpilation:** TİLK kaynak kodunu C'ye çevirerek GCC/Clang ile yerel çalıştırılabilir formata dönüştürür.
 - **Asenkron Kanallar:** Go benzeri kanallarla (channels) arka plan görevleri arası iletişim (`asenkron` anahtar kelimesi).
 - **Dil Sunucusu (LSP):** Otomatik tamamlama, anlık hata denetimi ve hover yardımı sağlayan `oz-lsp`.
 
-### 🚀 Gelecek Planları (Uzun Vadeli)
+###  Gelecek Planları (Uzun Vadeli)
 - [ ] Closure (kapanış) desteği
 - [ ] String interpolasyonu (`"Merhaba {isim}"`)
 - [ ] Pattern matching (`eşleştir` anahtar kelimesi)
@@ -280,12 +280,12 @@ cargo test --all
 
 ---
 
-## 📄 Lisans
+##  Lisans
 
 Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 
 ---
 
-## 📚 Kapsamlı Kılavuzlar
+##  Kapsamlı Kılavuzlar
 
 Tilk dili hakkında detaylı 30 adet kılavuz belgesi [kullanim_kilavuzu/](kullanim_kilavuzu/) dizini altında yer almaktadır.

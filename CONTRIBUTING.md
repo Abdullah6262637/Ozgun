@@ -1,8 +1,8 @@
-# TİLK'e Katkıda Bulunma Rehberi 🤝
+# TİLK'e Katkıda Bulunma Rehberi 
 
 TİLK projesine katkıda bulunmak istediğiniz için teşekkürler! Bu belge, geliştirme ortamının kurulumunu ve katkı sürecini açıklar.
 
-## 🛠️ Geliştirme Ortamı Kurulumu
+## ️ Geliştirme Ortamı Kurulumu
 
 ### Gereksinimler
 - **Rust** (stable, 1.75+): [rustup.rs](https://rustup.rs) üzerinden kurulum
@@ -34,7 +34,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ---
 
-## 📋 Kod Standartları
+##  Kod Standartları
 
 1. **Formatlama**: `cargo fmt` kullanılmalıdır
 2. **Lint**: `cargo clippy` uyarısız geçmelidir (`-D warnings`)
@@ -44,7 +44,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ---
 
-## 🔀 Pull Request Süreci
+##  Pull Request Süreci
 
 1. `main` dalından yeni bir dal oluşturun:
    ```bash
@@ -70,7 +70,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ---
 
-## 📂 Proje Yapısı
+##  Proje Yapısı
 
 | Dizin | Açıklama |
 |-------|----------|
@@ -85,7 +85,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ---
 
-## 🏷️ Commit Mesajı Formatı
+## ️ Commit Mesajı Formatı
 
 - `feat:` — Yeni özellik
 - `fix:` — Hata düzeltme
@@ -96,6 +96,6 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ---
 
-## ❓ Sorularınız mı var?
+##  Sorularınız mı var?
 
 GitHub Issues üzerinden soru sorabilir veya tartışma başlatabilirsiniz.
