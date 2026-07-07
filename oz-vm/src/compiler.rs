@@ -578,7 +578,7 @@ impl Compiler {
                     self.compile_stmt(s)?;
                 }
                 let (continues, breaks) = self.loop_stack.pop().unwrap();
-                
+
                 for idx in continues {
                     self.instructions[idx] = Instruction::Jump(start_idx);
                 }
@@ -586,7 +586,7 @@ impl Compiler {
                 self.instructions.push(Instruction::Jump(start_idx));
                 let end_idx = self.instructions.len();
                 self.instructions[jump_false_idx] = Instruction::JumpIfFalse(end_idx);
-                
+
                 for idx in breaks {
                     self.instructions[idx] = Instruction::Jump(end_idx);
                 }
