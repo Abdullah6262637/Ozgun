@@ -104,6 +104,22 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), String> {
+        self.run_instructions(self.instructions.clone())
+    }
+
+    pub fn run_instructions(&mut self, insts: Vec<Instruction>) -> Result<(), String> {
+        let old_ip = self.ip;
+        let old_insts = std::mem::replace(&mut self.instructions, insts);
+        self.ip = 0;
+
+        let res = self.run_loop();
+
+        self.instructions = old_insts;
+        self.ip = old_ip;
+        res
+    }
+
+    fn run_loop(&mut self) -> Result<(), String> {
         while self.ip < self.instructions.len() {
             let inst = &self.instructions[self.ip];
             self.ip += 1;

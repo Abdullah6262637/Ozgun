@@ -24,6 +24,8 @@ enum Commands {
         /// Hedef dosya yolu
         file: PathBuf,
     },
+    /// TİLK etkileşimli kabuğunu (REPL) başlatır.
+    Repl,
     /// .oz dosyasını ayrıştırıp AST (Soyut Sözdizimi Ağacı) yapısını yazdırır.
     Parse {
         /// Hedef dosya yolu
@@ -233,6 +235,89 @@ fn main() {
                 match token_res {
                     Ok(token) => println!("{:?} at {:?}", token, span),
                     Err(_) => eprintln!("HATA: Tanımlanamayan karakter at {:?}", span),
+                }
+            }
+        }
+        Commands::Repl => {
+            println!("TİLK Etkileşimli Kabuk (REPL) - Çıkmak için 'cikis' yazın veya Ctrl+C / Ctrl+D tuşlarına basın.");
+            let mut rl = rustyline::DefaultEditor::new().unwrap();
+
+            let mut tc = oz_parser::typechecker::TypeChecker::new();
+            let mut env = oz_parser::typechecker::create_default_type_env(&mut tc);
+            let mut vm = oz_vm::vm::VM::new(vec![]);
+
+            loop {
+                let compiler = oz_vm::compiler::Compiler::new();
+                let readline = rl.readline(">> ");
+                match readline {
+                    Ok(line) => {
+                        let line = line.trim();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        if line == "cikis" || line == "çıkış" {
+                            break;
+                        }
+
+                        let _ = rl.add_history_entry(line);
+
+                        let lexer = oz_lexer::Token::lexer(line);
+                        let mut tokens = Vec::new();
+                        let mut lex_error = false;
+                        for (token_res, span) in lexer.spanned() {
+                            match token_res {
+                                Ok(token) => tokens.push((token, span)),
+                                Err(_) => {
+                                    eprintln!("HATA: Sözcüksel analiz hatası at {:?}", span);
+                                    lex_error = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if lex_error {
+                            continue;
+                        }
+
+                        let ast = match oz_parser::parse_tokens(tokens, line.len()) {
+                            Ok(ast) => ast,
+                            Err(errors) => {
+                                print_parser_errors(errors, "<repl>", line);
+                                continue;
+                            }
+                        };
+
+                        let mut type_err = false;
+                        for stmt in &ast {
+                            if let Err(err) = tc.infer_stmt(stmt, &mut env, &None) {
+                                print_type_error(err, "<repl>", line);
+                                type_err = true;
+                                break;
+                            }
+                        }
+                        if type_err {
+                            continue;
+                        }
+
+                        let insts = match compiler.compile_program(&ast) {
+                            Ok(insts) => insts,
+                            Err(e) => {
+                                eprintln!("Derleme hatası: {}", e);
+                                continue;
+                            }
+                        };
+
+                        if let Err(e) = vm.run_instructions(insts) {
+                            eprintln!("Çalışma zamanı hatası: {}", e);
+                        }
+                    }
+                    Err(rustyline::error::ReadlineError::Interrupted)
+                    | Err(rustyline::error::ReadlineError::Eof) => {
+                        break;
+                    }
+                    Err(err) => {
+                        println!("Hata: {:?}", err);
+                        break;
+                    }
                 }
             }
         }
